@@ -1,0 +1,186 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}{{ label }}{% endblock %}
+{% block content %}
+<header class="page-head sport-{{ category }}">
+  {% if kind or area %}<nav class="crumbs" aria-label="Back"><a href="{% url 'sport' page %}">All {% if kind %}{{ parent_label|lower }}{% else %}{{ label|lower }}{% endif %}</a></nav>{% endif %}
+  <div class="head-row">
+    <div>
+      <h1 class="display{% if kind or area %} display-md{% endif %}">{{ label }}</h1>
+      {% if area %}<p class="area-line"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg>In <a href="{% url 'place' area.slug %}">{{ area.name }}{% if not area.is_country %}, {{ area.country }}{% endif %}</a><a class="area-clear" href="{% if kind %}{% url 'sport_kind' page kind %}{% else %}{% url 'sport' page %}{% endif %}">Show everywhere</a></p>{% endif %}
+    </div>
+    {% if data.where|length > 1 or area %}
+    <form class="where" method="get" action="">
+      <label for="where-select">Where</label>
+      <select id="where-select" name="place" data-autosubmit>
+        <option value="">Everywhere</option>
+        {% if data.where_countries|length > 1 %}<optgroup label="Countries">{% for c in data.where_countries %}<option value="{{ c.slug }}"{% if area and area.slug == c.slug %} selected{% endif %}>{{ c.name }} ({{ c.count }})</option>{% endfor %}</optgroup>{% endif %}
+        <optgroup label="Places">{% for w in data.where %}<option value="{{ w.slug }}"{% if area and area.slug == w.slug %} selected{% endif %}>{{ w.name }} ({{ w.count }})</option>{% endfor %}</optgroup>
+      </select>
+      <button type="submit" class="btn where-go">Show</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if not data.empty %}<p class="page-sub">{{ data.totals.all.count }} {% if kind %}sessions{% else %}activities{% endif %} since {{ data.first_date|date:"F Y" }}</p>{% endif %}
+  {% if kind %}<p class="kind-about">{% include "dashboard/partials/kind_about.html" with kind=kind %}</p>{% endif %}
+</header>
+{% if data.empty %}
+<section class="empty"><p>No {{ label|lower }}{% if area %} in {{ area.name }}{% endif %} yet.</p></section>
+{% else %}
+{% with t=data.totals %}
+<div class="kpis">
+  {% if area %}
+  {# in one place the calendar KPIs (this month, weekly average) say little: show what happened there #}
+  <div class="kpi"><p class="kpi-label">Sessions</p><p class="kpi-value">{{ t.all.count|num }}</p><p class="kpi-meta">on {{ data.days_count }} day{{ data.days_count|pluralize }}</p></div>
+  {% if data.has_km %}<div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ t.all.km|kmv:0 }}<small> km</small></p><p class="kpi-meta">{{ t.all.km|div:t.all.count|num:1 }} km a session</p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">Time</p><p class="kpi-value">{{ t.all.hours|hours:1 }}<small> h</small></p><p class="kpi-meta">{{ t.all.secs|hm }}{% if t.all.elev %}, {{ t.all.elev|num }} m climbed{% endif %}</p></div>
+  {% if data.has_km %}<div class="kpi"><p class="kpi-label">Longest</p><p class="kpi-value"><a href="{% url 'activity' data.longest.id %}">{{ data.longest.km|kmv:2 }}<small> km</small></a></p><p class="kpi-meta">{{ data.longest.date|nicedate }}</p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">Last time</p><p class="kpi-value kpi-text">{{ data.last_date|date:"j M Y" }}</p><p class="kpi-meta">first on {{ data.first_date|date:"j M Y" }}</p></div>
+  {% else %}
+  <div class="kpi"><p class="kpi-label">This year</p><p class="kpi-value">{% if data.has_km %}{{ t.year.km|kmv:0 }}<small> km</small>{% else %}{{ t.year.hours|hours:0 }}<small> h</small>{% endif %}</p><p class="kpi-meta">{{ t.year.count }} session{{ t.year.count|pluralize }}, {{ t.year.secs|hm }}</p></div>
+  <div class="kpi"><p class="kpi-label">This month</p><p class="kpi-value">{% if data.has_km %}{{ t.month.km|kmv:1 }}<small> km</small>{% else %}{{ t.month.hours|hours:1 }}<small> h</small>{% endif %}</p><p class="kpi-meta">{{ t.month.count }} session{{ t.month.count|pluralize }}</p></div>
+  {% if data.has_km %}<div class="kpi"><p class="kpi-label">Weekly average</p><p class="kpi-value">{{ t.weekly_avg_km|kmv:1 }}<small> km</small></p><p class="kpi-meta">last 12 weeks, {{ t.weekly_avg_count|num:1 }} a week</p></div>
+  <div class="kpi"><p class="kpi-label">Longest</p><p class="kpi-value"><a href="{% url 'activity' data.longest.id %}">{{ data.longest.km|kmv:2 }}<small> km</small></a></p><p class="kpi-meta">{{ data.longest.date|nicedate }}</p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">All time</p><p class="kpi-value">{% if data.has_km %}{{ t.all.km|kmv:0 }}<small> km</small>{% else %}{{ t.all.hours|hours:0 }}<small> h</small>{% endif %}</p><p class="kpi-meta">{{ t.all.hours|hours:0 }} hours{% if t.all.elev %}, {{ t.all.elev|num }} m climbed{% endif %}</p></div>
+  {% endif %}
+</div>
+{% endwith %}
+
+{% if data.mix %}
+<section class="panel mix-panel">
+  <div class="panel-head"><h2>Kinds of run</h2><span class="panel-note">Sorted from your pace, heart rate and the runs around each one. Open a run to see why, or to change it.</span></div>
+  <div class="mix">
+    {% for m in data.mix %}
+    <a class="mix-item grp-{{ m.group }}" href="{% url 'sport_kind' page m.key %}{{ place_qs }}">
+      <span class="mix-key"></span>
+      <span class="mix-label">{{ m.label }}</span>
+      <span class="mix-count">{{ m.count }}</span>
+      <span class="mix-meta">{% if m.km >= 1 %}{{ m.km|kmv:0 }} km{% else %}{{ m.km|kmv:1 }} km{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if data.where|length > 1 and not area or area.is_country %}
+<section class="panel where-panel">
+  <div class="panel-head"><h2>Where you {% if category == "run" %}run{% elif category == "walk" %}walk{% elif category == "cycle" %}ride{% else %}train{% endif %}</h2><span class="panel-note">Open a place to see these same charts for it alone.</span></div>
+  <div class="mix">
+    {% for w in data.where %}{% if not area or w.cc == area.country_code %}
+    <a class="mix-item place-item" href="?place={{ w.slug }}">
+      <svg class="icon mix-pin" aria-hidden="true"><use href="#i-pin"></use></svg>
+      <span class="mix-label">{{ w.name }}</span>
+      <span class="mix-count">{{ w.count }}</span>
+      <span class="mix-meta">{{ w.country }}{% if w.km >= 1 %}, {{ w.km|kmv:0 }} km{% endif %}</span>
+    </a>
+    {% endif %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% include "dashboard/partials/narrative.html" with title="How it is going" seed=category|add:kind sentences=2 more=True text=narrative %}
+
+<div class="grid grid-2">
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Month by month</h2>{% if data.monthly.groups|length == 1 %}<span class="panel-note">{% if data.monthly.unit == "km" %}Kilometres{% else %}Hours{% endif %} per month</span>{% endif %}</div>
+    <div class="chart" id="chart-monthly" style="height:260px"></div>
+  </section>
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Day by day</h2><span class="panel-note">Every day {% if area %}from your first to your last session in {{ area.name }}{% else %}since your first session{% endif %}, one bar per day. When they do not all fit, drag the bar under the chart to move through time.</span></div>
+    <div class="chart" id="chart-daily" style="height:300px"></div>
+  </section>
+  {% if data.points %}
+  <section class="panel">
+    <div class="panel-head"><h2>{% if pace_mode %}Pace{% else %}Speed{% endif %} over time</h2></div>
+    <p class="panel-note">Every session with the 6-week median line{% if category == "run" and not kind %}. Races and time trials are left out of the line{% endif %}. Click a dot to open it.</p>
+    <div class="chart" id="chart-pace" style="height:270px"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Aerobic efficiency</h2></div>
+    <p class="panel-note">Metres covered per heartbeat on sessions of 3 km or more. Going up means you move faster for the same effort.</p>
+    <div class="chart" id="chart-eff" style="height:270px"></div>
+  </section>
+  {% endif %}
+  {% if data.pbs %}
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Best efforts</h2>
+      <div class="seg" role="group" aria-label="Period">
+        <button type="button" class="seg-btn is-on" data-period="month">Best per month</button>
+        <button type="button" class="seg-btn" data-period="quarter">Best per quarter</button>
+      </div>
+    </div>
+    <p class="panel-note">Fastest time over each distance inside any {% if kind %}{{ label|lower }} session{% else %}activity{% endif %}{% if area %} in {{ area.name }}{% endif %}. The table has your best ever; each small chart has the fastest of every month or quarter. Up is faster.</p>
+    <div class="pb-grid">
+      <div class="table-scroll">
+      <table class="table">
+        <thead><tr><th scope="col">Distance</th><th scope="col" class="num">Best</th><th scope="col" class="num">Last 90 days</th></tr></thead>
+        <tbody>
+        {% for p in data.pbs %}
+          <tr>
+            <th scope="row">{{ p.label }}</th>
+            <td class="num"><a href="{% url 'activity' p.id %}">{{ p.secs|dur }}</a><span class="sub">{{ p.date|nicedate }}</span></td>
+            <td class="num">{% if p.secs90 %}<a href="{% url 'activity' p.id90 %}">{{ p.secs90|dur }}</a>{% if p.secs90 == p.secs %}<span class="sub">same</span>{% endif %}{% else %}-{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div class="multiples multiples-3" id="chart-progress"></div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if data.weather %}{% with wx=data.weather %}
+  <section class="panel span-2 weather-panel">
+    <div class="panel-head"><h2>Weather and your {% if kind %}{{ label|lower }}{% else %}{{ label|lower }}{% endif %}</h2><span class="panel-note">{{ wx.n }} session{{ wx.n|pluralize }} with weather from Open-Meteo</span></div>
+    <dl class="wx-facts">
+      <div><dt>In the rain</dt><dd>{{ wx.wet }}<span> session{{ wx.wet|pluralize }} with 0.2 mm or more</span></dd></div>
+      <div><dt>Windy</dt><dd>{{ wx.windy }}<span> session{{ wx.windy|pluralize }} with wind of 25 km/h or more</span></dd></div>
+      <div><dt>Warmest</dt><dd><a href="{% url 'activity' wx.warmest.id %}">{{ wx.warmest.temp|num:0 }}°C</a><span>{{ wx.warmest.date|nicedate }}</span></dd></div>
+      <div><dt>Coldest</dt><dd><a href="{% url 'activity' wx.coldest.id %}">{{ wx.coldest.temp|num:0 }}°C</a><span>{{ wx.coldest.date|nicedate }}</span></dd></div>
+      <div><dt>Windiest</dt><dd><a href="{% url 'activity' wx.windiest.id %}">{{ wx.windiest.wind|num:0 }} km/h</a><span>{{ wx.windiest.date|nicedate }}</span></dd></div>
+      {% if wx.wettest %}<div><dt>Wettest</dt><dd><a href="{% url 'activity' wx.wettest.id %}">{{ wx.wettest.rain|num:1 }} mm</a><span>{{ wx.wettest.date|nicedate }}</span></dd></div>{% endif %}
+    </dl>
+    {% if wx.n_cmp < 3 %}<p class="panel-note wx-few">The charts of temperature and wind against efficiency show up once there are three or more {% if kind or category != "run" %}sessions{% else %}easy, steady or long runs{% endif %} with weather here.</p>{% endif %}
+  </section>
+  {% if wx.n_cmp >= 3 %}
+  <section class="panel">
+    <div class="panel-head"><h2>Temperature and efficiency</h2></div>
+    <p class="panel-note">Each dot is {% if kind or category != "run" %}a session{% else %}an easy, steady or long session{% endif %}, measured in metres per heartbeat. The line is the median per temperature band: where it dips, heat or cold is costing you.</p>
+    <div class="chart" id="chart-wx-temp" style="height:260px"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Wind and efficiency</h2></div>
+    <p class="panel-note">Wind speed at the time of each session. On a loop the headwind and tailwind roughly cancel out on paper, but a headwind costs more than a tailwind gives back, so windy days usually sit lower. Open a session to see the wind along its route.</p>
+    <div class="chart" id="chart-wx-wind" style="height:260px"></div>
+  </section>
+  {% endif %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Conditions over time</h2><span class="panel-note">Temperature and wind for each session</span></div>
+    <div class="chart" id="chart-wx-time" style="height:240px"></div>
+  </section>
+  {% endwith %}{% endif %}
+
+  <section class="panel">
+    <div class="panel-head"><h2>When you go out</h2></div>
+    <div class="chart" id="chart-when" style="height:250px"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>How far you go</h2></div>
+    <div class="chart" id="chart-hist" style="height:250px"></div>
+  </section>
+  {% if data.cadence %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Cadence by month</h2><span class="panel-note">{% if category == "cycle" %}Pedal revolutions{% else %}Steps{% endif %} per minute, monthly average</span></div>
+    <div class="chart" id="chart-cadence" style="height:220px"></div>
+  </section>
+  {% endif %}
+</div>
+
+<section class="feed" aria-label="{{ label }}">
+  <div class="section-head"><h2 class="section-title">{% if kind %}{{ label }}{% else %}All {{ label|lower }}{% endif %}</h2></div>
+  <div class="feed-list">{% include "dashboard/partials/feed_weeks.html" %}</div>
+</section>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% endif %}{% endblock %}

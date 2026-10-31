@@ -1,0 +1,213 @@
+{% extends "dashboard/base.html" %}{% load static fmt %}
+{% block title %}{% if a.name %}{{ a.name }}{% else %}{{ label }}{% endif %}{% endblock %}
+{% block main_class %}sport-{{ a.category }}{% endblock %}
+{% block head %}{% if map_config %}<link rel="stylesheet" href="{% static 'dashboard/vendor/leaflet/leaflet.css' %}">{% if map_config.vector %}<link rel="stylesheet" href="{% static 'dashboard/vendor/maplibre/maplibre-gl.css' %}">{% endif %}{% endif %}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Activity navigation">
+  <a href="{% if a.category == 'other' %}{% url 'sport' 'other' %}{% else %}{% url 'sport' page %}{% endif %}">{{ label }}</a>
+  <span class="crumbs-pager">
+    {% if d.next %}<a href="{% url 'activity' d.next.activity_id %}" title="{{ d.next.name }}">Newer</a>{% endif %}
+    {% if d.prev %}<a href="{% url 'activity' d.prev.activity_id %}" title="{{ d.prev.name }}">Older</a>{% endif %}
+  </span>
+</nav>
+<header class="act-head sport-{{ a.category }}">
+  <div class="act-title">
+    <span class="act-icon">{% sport_icon a.category "icon icon-lg" %}</span>
+    <div>
+      <h1 class="display display-md">{% if a.name %}{{ a.name }}{% else %}{{ a.type_key|typelabel }}{% endif %}</h1>
+      <p class="page-sub">
+        <time datetime="{{ a.start_local|date:'c' }}">{{ a.start_local|date:"l j F Y" }}, {{ a.start_local|date:"H:i" }}</time>
+        <span class="sep">{{ a.type_key|typelabel }}</span>
+        {% if a.place %}<a class="chip chip-place" href="{% url 'place' a.place.slug %}"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg>{{ a.place.label }}, {{ a.place.country }}</a>{% elif a.location_name %}<span class="sep">{{ a.location_name }}</span>{% endif %}
+        {% if kind_label %}<a class="chip chip-kind grp-{{ a.kind|kindgroup }}" href="{% url 'sport_kind' page a.kind %}">{{ kind_label }}</a>{% elif a.event_type == "race" %}<span class="chip chip-race">Race</span>{% endif %}
+        {% if a.te_label|telabel %}<span class="chip">Garmin: {{ a.te_label|telabel }}</span>{% endif %}
+      </p>
+    </div>
+  </div>
+</header>
+
+<div class="kpis kpis-act">
+  {% if a.distance_m %}<div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ a.distance_m|km }}<small> km</small></p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">Moving time</p><p class="kpi-value">{{ a.time_s|dur }}</p>{% if a.elapsed_s and a.elapsed_s > a.time_s|add:60 %}<p class="kpi-meta">{{ a.elapsed_s|dur }} total</p>{% endif %}</div>
+  {% if a.distance_m %}{% if pace_mode %}<div class="kpi"><p class="kpi-label">Pace</p><p class="kpi-value">{{ a.pace_s_per_km|pace }}<small> /km</small></p></div>
+  {% else %}<div class="kpi"><p class="kpi-label">Speed</p><p class="kpi-value">{{ a.speed_kmh|speed }}<small> km/h</small></p></div>{% endif %}{% endif %}
+  {% if a.avg_hr %}<div class="kpi"><p class="kpi-label">Heart rate</p><p class="kpi-value">{{ a.avg_hr|num }}<small> bpm</small></p><p class="kpi-meta">max {{ a.max_hr|num }}</p></div>{% endif %}
+  {% if a.elev_gain_m %}<div class="kpi"><p class="kpi-label">Climb</p><p class="kpi-value">{{ a.elev_gain_m|num }}<small> m</small></p>{% if a.elev_loss_m %}<p class="kpi-meta">{{ a.elev_loss_m|num }} m down</p>{% endif %}</div>{% endif %}
+  {% if a.avg_cadence %}<div class="kpi"><p class="kpi-label">Cadence</p><p class="kpi-value">{{ a.avg_cadence|num }}<small> {% if a.category == "cycle" %}rpm{% else %}spm{% endif %}</small></p>{% if a.avg_stride_cm %}<p class="kpi-meta">stride {{ a.avg_stride_cm|num }} cm</p>{% endif %}</div>{% endif %}
+  {% if a.aerobic_te %}<div class="kpi"><p class="kpi-label">Training effect</p><p class="kpi-value">{{ a.aerobic_te|num:1 }}<small> aerobic</small></p><p class="kpi-meta">{{ a.anaerobic_te|num:1 }} anaerobic</p></div>{% endif %}
+  {% if a.training_load %}<div class="kpi"><p class="kpi-label">Load</p><p class="kpi-value">{{ a.training_load|num }}</p></div>{% endif %}
+  {% if a.calories %}<div class="kpi"><p class="kpi-label">Calories</p><p class="kpi-value">{{ a.calories|num }}<small> kcal</small></p></div>{% endif %}
+  {% if a.avg_power %}<div class="kpi"><p class="kpi-label">Power</p><p class="kpi-value">{{ a.avg_power|num }}<small> W</small></p></div>{% endif %}
+</div>
+
+{% if a.category == "run" and a.run_type %}
+<section class="panel kind-panel grp-{{ a.kind|kindgroup }}">
+  <div class="kind-row">
+    <div class="kind-text">
+      <h2><span class="mix-key"></span>{{ kind_label }}</h2>
+      <p>{% if a.run_type_manual %}You set this. The automatic choice was: {% endif %}{{ a.run_type_reason }}</p>
+    </div>
+    <form method="post" action="{% url 'set_run_type' a.activity_id %}" class="kind-form">
+      {% csrf_token %}
+      <label for="run_type" class="kind-form-label">Kind of run</label>
+      <select name="run_type" id="run_type">
+        <option value="">Automatic</option>
+        {% for k, label in run_types %}<option value="{{ k }}"{% if a.run_type_manual == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn">Save</button>
+    </form>
+  </div>
+  {% if d.blocks %}
+  <div class="table-scroll blocks">
+  <table class="table">
+    <thead><tr><th scope="col">Fast block</th><th scope="col" class="num">From</th><th scope="col" class="num">Time</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th></tr></thead>
+    <tbody>
+    {% for b in d.blocks %}
+      <tr><th scope="row">{{ forloop.counter }}</th><td class="num">{{ b.at|kmv:2 }} km</td><td class="num">{{ b.dur|dur }}</td><td class="num">{{ b.dist|km }} km</td><td class="num">{{ b.pace|pace }} /km</td><td class="num">{{ b.hr|num }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if d.zones %}
+<section class="panel zones-panel">
+  <div class="panel-head"><h2>Heart rate zones</h2>{% if d.floors %}<span class="panel-note">Zones from {{ d.floors.0|num }} bpm</span>{% endif %}</div>
+  {% zone_ribbon d.zones "lg" %}
+  <ol class="zone-list">
+    {% for z in d.zones %}
+    <li class="zl-{{ forloop.counter }}"><span class="zone-key"></span><span class="zone-name">Zone {{ forloop.counter }}</span>
+      <span class="zone-bpm">{% if d.floors %}{% with i=forloop.counter0 %}{{ d.floors|get_index:i|num }}{% endwith %}+ bpm{% endif %}</span>
+      <span class="zone-time">{{ z|dur }}</span></li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{% include "dashboard/partials/narrative.html" with title="About this session" seed=a.activity_id sentences=3 more=False text=a.narrative %}
+
+{% with w=d.weather %}{% if w %}
+<section class="panel weather-act">
+  <div class="panel-head"><h2>Weather</h2><span class="panel-note">Open-Meteo {% if w.source == "archive" %}ERA5 reanalysis{% else %}model data{% endif %} for this area at the time, not a station reading</span></div>
+  <div class="wx-grid">
+    <div class="wx-main">
+      <p class="wx-temp">{{ w.temp_c|num }}°C</p>
+      <p class="wx-desc">{{ w_desc|default:"No weather code" }}</p>
+      <p class="wx-feels">Feels like {{ w.feels_c|num }}°C</p>
+    </div>
+    <dl class="wx-list">
+      <div><dt>Wind</dt><dd><span class="wind-arrow" style="--deg:{{ w.wind_dir|default:0 }}deg" aria-hidden="true">&#8595;</span>{{ w.wind_kmh|num }} km/h from the {{ w_compass }}{% if w.gust_kmh %}<span>gusts up to {{ w.gust_kmh|num }} km/h</span>{% endif %}</dd></div>
+      {% if w.headwind_kmh is not None %}<div><dt>On your route</dt><dd>{% if w.headwind_kmh < 0.5 and w.headwind_kmh > -0.5 %}Headwind and tailwind about even{% elif w.headwind_kmh >= 0 %}{{ w.headwind_kmh|num:1 }} km/h headwind on average{% else %}{{ w.headwind_kmh|neg|num:1 }} km/h tailwind on average{% endif %}<span>into the wind {{ w.headwind_share|mul100|num }}% of the time</span></dd></div>{% endif %}
+      <div><dt>Rain during it</dt><dd>{% if w.precip_mm and w.precip_mm >= 0.05 %}{{ w.precip_mm|num:1 }} mm{% elif w.weather_code is not None and w.weather_code >= 51 %}A few drops{% else %}Dry{% endif %}<span>cloud cover {{ w.cloud_pct|num }}%</span></dd></div>
+      <div><dt>Humidity</dt><dd>{{ w.humidity|num }}%<span>dew point {{ w.dew_point_c|num:1 }}°C</span></dd></div>
+      <div><dt>Heat effect</dt><dd>{{ w_heat.1|capfirst|default:"-" }}<span>temperature + dew point = {{ w_heat.0 }}°F (runners' rule of thumb)</span></dd></div>
+      <div><dt>Pressure</dt><dd>{{ w.pressure_msl|num }} hPa<span>{{ w.pressure_surface|num }} hPa at ground level</span></dd></div>
+      {% if w.visibility_m is not None %}<div><dt>Visibility</dt><dd>{{ w.visibility_m|vis_km }} km</dd></div>{% endif %}
+      {% if a.raw.avgElevation is not None %}<div><dt>Altitude</dt><dd>{{ a.raw.avgElevation|num }} m<span>{{ a.raw.minElevation|num }} to {{ a.raw.maxElevation|num }} m on the route</span></dd></div>{% endif %}
+    </dl>
+  </div>
+</section>
+{% elif d.weather_error %}
+<section class="panel"><p class="panel-note">Weather could not be fetched for this activity yet: {{ d.weather_error }}</p></section>
+{% endif %}{% endwith %}
+
+{% if d.has_map or d.splits %}
+<div class="act-grid">
+  {% if d.has_map %}
+  <section class="panel map-panel">
+    <div class="panel-head"><h2>Route</h2><span class="panel-note">Coloured by heart rate zone. Hover the route, the charts or a split to follow along.</span></div>
+    {% if d.weather %}<p class="map-wind"><span class="wind-arrow" style="--deg:{{ d.weather.wind_dir|default:0 }}deg" aria-hidden="true">&#8595;</span>Wind {{ d.weather.wind_kmh|num }} km/h from the {{ w_compass }}</p>{% endif %}
+    <div id="map" class="map" role="img" aria-label="Map of the route"></div>
+  </section>
+  {% endif %}
+  {% if d.splits %}
+  <section class="panel splits-panel">
+    <div class="panel-head"><h2>Splits</h2><span class="panel-note">per {% if a.category == "cycle" %}5 km{% else %}km{% endif %}</span></div>
+    <div class="table-scroll">
+    <table class="table table-splits">
+      <thead><tr><th scope="col">{% if a.category == "cycle" %}5 km{% else %}Km{% endif %}</th><th scope="col">{% if pace_mode %}Pace{% else %}Time{% endif %}</th><th scope="col" class="num">HR</th><th scope="col" class="num">Climb</th>{% if d.split_wind %}<th scope="col" class="num" title="Headwind (+) or tailwind (-), km/h">Wind</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for s in d.splits %}
+        <tr data-split="{{ forloop.counter0 }}">
+          <th scope="row">{% if s.dist < 999 %}{{ s.dist|floatformat:0 }} m{% else %}{{ s.n }}{% endif %}</th>
+          <td><span class="split-bar" style="--w:0"></span><span class="split-val">{% if pace_mode %}{{ s.pace|pace }}{% else %}{{ s.secs|dur }}{% endif %}</span></td>
+          <td class="num">{{ s.hr|num }}</td>
+          <td class="num">{{ s.gain|num }}</td>
+          {% if d.split_wind %}{% with hw=d.split_wind|get_index:forloop.counter0 %}<td class="num wind-cell{% if hw is not None and hw > 3 %} is-head{% elif hw is not None and hw < -3 %} is-tail{% endif %}">{% if hw is None %}-{% else %}{{ hw|signed }}{% endif %}</td>{% endwith %}{% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if d.stream.t %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Through the session</h2>
+    {% if d.stream.d %}
+    <div class="seg" role="group" aria-label="Horizontal axis">
+      <button type="button" class="seg-btn is-on" data-axis="d">Distance</button>
+      <button type="button" class="seg-btn" data-axis="t">Time</button>
+    </div>
+    {% endif %}
+  </div>
+  <div id="stream-charts" class="stream-charts"></div>
+</section>
+{% else %}
+<section class="panel">
+  <p class="panel-note">{% if a.detail_status == "pending" %}The detailed recording for this activity has not been downloaded yet. It comes with the next sync.{% elif a.detail_status == "error" %}The recording could not be read: {{ a.detail_error }}{% else %}Garmin has no detailed recording for this activity.{% endif %}</p>
+</section>
+{% endif %}
+
+<div class="grid grid-2">
+  {% if d.laps|length > 1 %}
+  <section class="panel">
+    <div class="panel-head"><h2>Laps</h2></div>
+    <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">Lap</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">{% if pace_mode %}Pace{% else %}Speed{% endif %}</th><th scope="col" class="num">HR</th></tr></thead>
+      <tbody>
+      {% for l in d.laps %}
+        <tr><th scope="row">{{ l.index }}</th><td class="num">{{ l.distance_m|km }} km</td><td class="num">{{ l.duration_s|dur }}</td>
+          <td class="num">{% if pace_mode %}{{ l.pace_s_per_km|pace }}{% else %}{% if l.avg_speed %}{{ l.avg_speed|mul36|speed }}{% else %}-{% endif %}{% endif %}</td><td class="num">{{ l.avg_hr|num }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+  {% if d.efforts %}
+  <section class="panel">
+    <div class="panel-head"><h2>Best efforts in this session</h2></div>
+    <table class="table">
+      <thead><tr><th scope="col">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">{% if pace_mode %}Pace{% else %}Speed{% endif %}</th><th scope="col">Rank</th></tr></thead>
+      <tbody>
+      {% for e in d.efforts %}
+        <tr><th scope="row">{{ e.label }}</th><td class="num">{{ e.secs|dur }}</td>
+          <td class="num">{% if pace_mode %}{{ e.secs|per_km:e.dist|pace }}{% else %}{{ e.dist|kmh:e.secs|speed }}{% endif %}</td>
+          <td>{% if e.rank == 1 %}<span class="chip chip-pb">Best ever</span>{% elif e.pb_then %}<span class="chip">Best at the time</span>{% else %}{{ e.rank }}{{ e.rank|ordinal_suffix }} best{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+  {% if d.compare %}
+  <section class="panel">
+    <div class="panel-head"><h2>Against your last 90 days</h2><span class="panel-note">{{ d.compare.n }} {{ label|lower }} activities</span></div>
+    <dl class="compare">
+      {% if d.compare.dist_avg and a.distance_m %}<div><dt>Distance</dt><dd>{{ a.distance_km|kmv:1 }} km <span>vs {{ d.compare.dist_avg|kmv:1 }} km on average. Longer than {{ d.compare.longer_than }}% of them.</span></dd></div>{% endif %}
+      {% if d.compare.pace_avg and a.pace_s_per_km and pace_mode %}<div><dt>Pace</dt><dd>{{ a.pace_s_per_km|pace }} /km <span>vs a median of {{ d.compare.pace_avg|pace }} /km</span></dd></div>{% endif %}
+      {% if d.compare.hr_avg and a.avg_hr %}<div><dt>Heart rate</dt><dd>{{ a.avg_hr|num }} bpm <span>vs {{ d.compare.hr_avg|num }} bpm on average</span></dd></div>{% endif %}
+    </dl>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block data %}{{ chart_data|json_script:"page-data" }}{% if map_config %}{{ map_config|json_script:"map-config" }}{% endif %}{% endblock %}
+{% block scripts %}{% if map_config %}{% if map_config.vector %}<script src="{% static 'dashboard/vendor/maplibre/maplibre-gl.js' %}"></script>{% endif %}<script src="{% static 'dashboard/vendor/leaflet/leaflet.js' %}"></script>{% endif %}{% endblock %}

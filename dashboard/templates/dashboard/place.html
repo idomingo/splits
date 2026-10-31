@@ -1,0 +1,121 @@
+{% extends "dashboard/base.html" %}{% load static fmt %}
+{% block title %}{{ area.name }}{% endblock %}
+{% block head %}{% if map_config %}<link rel="stylesheet" href="{% static 'dashboard/vendor/leaflet/leaflet.css' %}">{% if map_config.vector %}<link rel="stylesheet" href="{% static 'dashboard/vendor/maplibre/maplibre-gl.css' %}">{% endif %}{% endif %}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <nav class="crumbs" aria-label="Back"><span class="crumb-trail"><a href="{% url 'places' %}">All places</a>{% if not area.is_country %}<a href="{% url 'place' area.country_code|lower %}">{{ area.country }}</a>{% endif %}</span></nav>
+  <div class="head-row">
+    <div>
+      <h1 class="display">{{ area.name }}</h1>
+      {% if not data.empty %}<p class="page-sub">{% if not area.is_country %}{{ area.country }}<span class="sep"></span>{% endif %}{{ data.totals.count }} activit{{ data.totals.count|pluralize:"y,ies" }} on {{ data.days }} day{{ data.days|pluralize }}<span class="sep"></span>{% if data.first.date == data.last.date %}{{ data.first|date:"j F Y" }}{% else %}{{ data.first|date:"j M Y" }} to {{ data.last|date:"j M Y" }}{% endif %}</p>{% endif %}
+    </div>
+    {% if not area.is_country %}
+    <details class="rename">
+      <summary>Rename</summary>
+      <form method="post" action="{% url 'rename_place' area.slug %}" class="rename-form">
+        {% csrf_token %}
+        <label for="place-name">Name shown for this place</label>
+        <input id="place-name" name="name" value="{{ area.place.label }}" maxlength="200">
+        <p class="panel-note">From GeoNames: {{ area.place.name }}. Leave empty to go back to it.</p>
+        <button type="submit" class="btn">Save</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</header>
+{% if data.empty %}
+<section class="empty"><p>No activities here yet.</p></section>
+{% else %}
+{% with t=data.totals %}
+<div class="kpis">
+  <div class="kpi"><p class="kpi-label">Activities</p><p class="kpi-value">{{ t.count|num }}</p><p class="kpi-meta">on {{ data.days }} day{{ data.days|pluralize }}</p></div>
+  {% if t.km >= 1 %}<div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ t.km|kmv:0 }}<small> km</small></p><p class="kpi-meta">{{ t.km|div:t.count|num:1 }} km on average</p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">Time</p><p class="kpi-value">{{ t.hours|hours:0 }}<small> h</small></p><p class="kpi-meta">{{ t.secs|hm }}</p></div>
+  {% if t.elev %}<div class="kpi"><p class="kpi-label">Climbed</p><p class="kpi-value">{{ t.elev|num }}<small> m</small></p><p class="kpi-meta">uphill in total</p></div>{% endif %}
+  <div class="kpi"><p class="kpi-label">First time</p><p class="kpi-value kpi-text">{{ data.first|date:"j M Y" }}</p><p class="kpi-meta">last on {{ data.last|nicedate }}</p></div>
+</div>
+{% endwith %}
+
+<section class="panel mix-panel">
+  <div class="panel-head"><h2>What you did here</h2><span class="panel-note">Open one to see its full dashboard for {{ area.name }} alone.</span></div>
+  <div class="mix">
+    {% for s in data.by_sport %}
+    <a class="mix-item sport-{{ s.cat }}" href="{% url 'sport' s.slug %}?place={{ area.slug }}">
+      <span class="mix-key mix-key-sport"></span>
+      <span class="mix-label">{{ s.label }}</span>
+      <span class="mix-count">{{ s.count }}</span>
+      <span class="mix-meta">{% if s.km >= 1 %}{{ s.km|kmv:0 }} km{% else %}{{ s.hours|hours:1 }} h{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% if data.mix %}
+  <h3 class="mix-sub">Kinds of run</h3>
+  <div class="mix">
+    {% for m in data.mix %}
+    <a class="mix-item grp-{{ m.group }}" href="{% url 'sport_kind' 'running' m.key %}?place={{ area.slug }}">
+      <span class="mix-key"></span>
+      <span class="mix-label">{{ m.label }}</span>
+      <span class="mix-count">{{ m.count }}</span>
+      <span class="mix-meta">{% if m.km >= 1 %}{{ m.km|kmv:0 }} km{% else %}{{ m.km|kmv:1 }} km{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if data.places %}
+<section class="panel where-panel">
+  <div class="panel-head"><h2>Places in {{ area.name }}</h2></div>
+  <div class="mix">
+    {% for w in data.places %}
+    <a class="mix-item place-item" href="{% url 'place' w.slug %}">
+      <svg class="icon mix-pin" aria-hidden="true"><use href="#i-pin"></use></svg>
+      <span class="mix-label">{{ w.name }}</span>
+      <span class="mix-count">{{ w.count }}</span>
+      <span class="mix-meta">{% if w.km >= 1 %}{{ w.km|kmv:0 }} km{% else %}&nbsp;{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if data.routes %}
+<section class="panel">
+  <div class="panel-head"><h2>Every route</h2><span class="panel-note">{% if data.routes|length >= 400 %}Your latest 400. {% endif %}Coloured by sport. Hover a line to see which one it was, click to open it.</span></div>
+  <ul class="map-legend" aria-label="Sports">{% for s in data.by_sport %}<li class="sport-{{ s.cat }}"><i aria-hidden="true"></i>{{ s.label }}</li>{% endfor %}</ul>
+  <div class="map map-routes" id="routes-map"></div>
+</section>
+{% endif %}
+
+<div class="grid grid-2">
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Month by month</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-pmonthly="hours">Time</button>
+        <button type="button" class="seg-btn" data-pmonthly="km">Distance</button>
+      </div>
+    </div>
+    <div class="chart" id="chart-p-monthly" style="height:240px"></div>
+  </section>
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Day by day</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-pdaily="hours">Time</button>
+        <button type="button" class="seg-btn" data-pdaily="km">Distance</button>
+      </div>
+    </div>
+    <p class="panel-note">From your first to your last day here, one bar per day.</p>
+    <div class="chart" id="chart-p-daily" style="height:260px"></div>
+  </section>
+</div>
+
+<section class="feed" aria-label="Activities in {{ area.name }}">
+  <div class="section-head"><h2 class="section-title">Everything in {{ area.name }}</h2></div>
+  <div class="feed-list">{% include "dashboard/partials/feed_weeks.html" %}</div>
+</section>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% if map_config %}{{ map_config|json_script:"map-config" }}{% endif %}{% endif %}{% endblock %}
+{% block scripts %}{% if map_config %}{% if map_config.vector %}<script src="{% static 'dashboard/vendor/maplibre/maplibre-gl.js' %}"></script>{% endif %}<script src="{% static 'dashboard/vendor/leaflet/leaflet.js' %}"></script>{% endif %}{% endblock %}

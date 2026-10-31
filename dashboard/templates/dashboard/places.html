@@ -1,0 +1,56 @@
+{% extends "dashboard/base.html" %}{% load static fmt %}
+{% block title %}Places{% endblock %}
+{% block head %}{% if map_config %}<link rel="stylesheet" href="{% static 'dashboard/vendor/leaflet/leaflet.css' %}">{% if map_config.vector %}<link rel="stylesheet" href="{% static 'dashboard/vendor/maplibre/maplibre-gl.css' %}">{% endif %}{% endif %}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Places</h1>
+  {% if not data.empty %}<p class="page-sub">{{ data.places|length }} place{{ data.places|length|pluralize }} in {{ data.countries|length }} countr{{ data.countries|length|pluralize:"y,ies" }}</p>{% endif %}
+</header>
+{% if data.empty %}
+<section class="empty"><p>No places yet. Every activity recorded with GPS gets the town or city where it started, at the next sync.</p></section>
+{% else %}
+{% with top=data.places.0 %}
+<div class="kpis">
+  <div class="kpi"><p class="kpi-label">Places</p><p class="kpi-value">{{ data.places|length }}</p><p class="kpi-meta">towns and cities</p></div>
+  <div class="kpi"><p class="kpi-label">Countries</p><p class="kpi-value">{{ data.countries|length }}</p><p class="kpi-meta">{% for c in data.countries|slice:":3" %}{{ c.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if data.countries|length > 3 %} and more{% endif %}</p></div>
+  <div class="kpi"><p class="kpi-label">Most visited</p><p class="kpi-value kpi-text"><a href="{% url 'place' top.slug %}">{{ top.name }}</a></p><p class="kpi-meta">{{ top.count }} activities</p></div>
+  <div class="kpi"><p class="kpi-label">With a place</p><p class="kpi-value">{{ data.placed|num }}</p><p class="kpi-meta">of {{ data.total|num }} activities; the rest have no GPS</p></div>
+</div>
+{% endwith %}
+
+<section class="panel places-map-panel">
+  <div class="panel-head"><h2>Map</h2><span class="panel-note">The bigger the circle, the more activities. Click one to open the place.</span></div>
+  <div class="map map-places" id="places-map"></div>
+</section>
+
+{% for c in data.countries %}
+<section class="panel country-panel">
+  <div class="panel-head">
+    <h2><a href="{% url 'place' c.slug %}">{{ c.name }}</a></h2>
+    <span class="panel-note">{{ c.count }} activit{{ c.count|pluralize:"y,ies" }}{% if c.km >= 1 %}, {{ c.km|kmv:0 }} km{% endif %}, {{ c.hours|hours:0 }} h</span>
+  </div>
+  <div class="table-scroll">
+  <table class="table places-table">
+    <thead><tr><th scope="col">Place</th><th scope="col" class="num">Activities</th><th scope="col">Sports</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
+    <tbody>
+    {% for p in c.places %}
+      <tr>
+        <th scope="row"><a href="{% url 'place' p.slug %}">{{ p.name }}</a></th>
+        <td class="num">{{ p.count }}</td>
+        <td><span class="sport-dots">{% for s in p.sports %}<span class="sport-dot sport-{{ s.cat }}" title="{{ s.cat|catlabel }}"><i aria-hidden="true"></i>{{ s.n }}<span class="visually-hidden"> {{ s.cat|catlabel }}</span></span>{% endfor %}</span></td>
+        <td class="num">{% if p.km >= 1 %}{{ p.km|kmv:0 }} km{% else %}-{% endif %}</td>
+        <td class="num">{{ p.hours|hours:1 }} h</td>
+        <td>{{ p.first|nicedate }}</td>
+        <td>{{ p.last|nicedate }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
+<p class="places-note">Each activity gets the town or city where it started. A city counts for its whole area, so a run in a suburb counts for the city. Indoor sessions and anything recorded without GPS have no place. You can rename a place on its own page. Place names from <a href="https://www.geonames.org" rel="noopener">GeoNames</a>.</p>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% if map_config %}{{ map_config|json_script:"map-config" }}{% endif %}{% endif %}{% endblock %}
+{% block scripts %}{% if map_config %}{% if map_config.vector %}<script src="{% static 'dashboard/vendor/maplibre/maplibre-gl.js' %}"></script>{% endif %}<script src="{% static 'dashboard/vendor/leaflet/leaflet.js' %}"></script>{% endif %}{% endblock %}

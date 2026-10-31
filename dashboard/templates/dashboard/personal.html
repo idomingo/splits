@@ -1,0 +1,134 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Personal{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Personal</h1>
+  {% if not data.empty %}<p class="page-sub">Everything since {{ data.first|date:"j F Y" }}</p>{% endif %}
+</header>
+{% if data.empty %}
+<section class="empty"><p>Nothing here yet. Sync your Garmin history first.</p></section>
+{% else %}
+<div class="kpis">
+  <div class="kpi"><p class="kpi-label">Activities</p><p class="kpi-value">{{ data.life.count|num }}</p><p class="kpi-meta">on {{ data.days_active|num }} different days</p></div>
+  <div class="kpi"><p class="kpi-label">Time moving</p><p class="kpi-value">{{ data.life.hours|hours:0 }}<small> h</small></p><p class="kpi-meta">{{ data.life.hours|div:24|num:1 }} full days</p></div>
+  <div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ data.life.km|kmv:0 }}<small> km</small></p><p class="kpi-meta">{{ data.life.km|div:40075|num:2 }} times around the Earth</p></div>
+  <div class="kpi"><p class="kpi-label">Climbed</p><p class="kpi-value">{{ data.life.elev|num }}<small> m</small></p><p class="kpi-meta">{{ data.life.elev|div:8849|num:1 }} times Everest</p></div>
+  <div class="kpi"><p class="kpi-label">Current streak</p><p class="kpi-value">{{ data.streak.current }}<small> day{{ data.streak.current|pluralize }}</small></p><p class="kpi-meta">{{ data.streak.weeks }} week{{ data.streak.weeks|pluralize }} in a row with activity</p></div>
+  <div class="kpi"><p class="kpi-label">Longest streak</p><p class="kpi-value">{{ data.streak.best }}<small> days</small></p><p class="kpi-meta">ended {{ data.streak.best_end|nicedate }}</p></div>
+</div>
+
+{% include "dashboard/partials/narrative.html" with title="Your story so far" seed="personal" sentences=3 more=True text=narrative %}
+
+{% if data.pbs %}
+<section class="panel">
+  <div class="panel-head"><h2>Personal bests</h2><span class="panel-note">Fastest time over each distance, taken from inside any activity</span></div>
+  {% regroup data.pbs by cat as pb_groups %}
+  {% for g in pb_groups %}
+  <h3 class="pb-group sport-{{ g.grouper }}"><span class="key"></span>{{ g.grouper|catlabel }}</h3>
+  <div class="pb-cards">
+    {% for p in g.list %}
+    <a class="pb sport-{{ p.cat }}" href="{% url 'activity' p.id %}">
+      <span class="pb-dist">{{ p.label }}</span>
+      <span class="pb-time">{{ p.secs|dur }}</span>
+      <span class="pb-meta">{% if p.cat == "run" or p.cat == "walk" %}{{ p.secs|per_km:p.dist|pace }} /km{% else %}{{ p.dist|kmh:p.secs|speed }} km/h{% endif %}, {{ p.date|nicedate }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="grid grid-2">
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Year by year</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-yearly="hours">Time</button>
+        <button type="button" class="seg-btn" data-yearly="km">Distance</button>
+      </div>
+    </div>
+    <div class="chart" id="chart-yearly" style="height:260px"></div>
+    <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">Year</th>{% for c in data.sports %}<th scope="col" class="num"><span class="key sport-{{ c }}"></span>{{ c|catlabel }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead>
+      <tbody>
+      {% for y in data.year_rows %}
+        <tr><th scope="row">{{ y.year }}</th>
+          {% for cell in y.cells %}<td class="num">{% if cell.count %}{% if cell.km >= 1 %}{{ cell.km|kmv:0 }} km{% else %}{{ cell.hours|hours:0 }} h{% endif %}<span class="sub">{{ cell.count }}</span>{% else %}-{% endif %}</td>{% endfor %}
+          <td class="num">{{ y.hours|hours:0 }} h<span class="sub">{{ y.count }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Month by month</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-pmonthly="hours">Time</button>
+        <button type="button" class="seg-btn" data-pmonthly="km">Distance</button>
+      </div>
+    </div>
+    <p class="panel-note">Every month since your first activity.</p>
+    <div class="chart" id="chart-p-monthly" style="height:260px"></div>
+  </section>
+
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Day by day</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-pdaily="hours">Time</button>
+        <button type="button" class="seg-btn" data-pdaily="km">Distance</button>
+      </div>
+    </div>
+    <p class="panel-note">Every day since your first activity, one bar per day. When they do not all fit, drag the bar under the chart to move through time.</p>
+    <div class="chart" id="chart-p-daily" style="height:300px"></div>
+  </section>
+
+  {% for r in data.records %}
+  <section class="panel records sport-{{ r.cat }}">
+    <div class="panel-head"><h2><span class="key"></span>{{ r.label }} records</h2><span class="panel-note">{{ r.count }} activities</span></div>
+    <dl class="record-list">
+      {% if r.far %}<div><dt>Farthest</dt><dd><a href="{% url 'activity' r.far.activity_id %}">{{ r.far.distance_m|km }} km</a><span>{{ r.far.start_local|nicedate }}</span></dd></div>{% endif %}
+      <div><dt>Longest</dt><dd><a href="{% url 'activity' r.long.activity_id %}">{{ r.long.moving_s|default:r.long.duration_s|dur }}</a><span>{{ r.long.start_local|nicedate }}</span></dd></div>
+      {% if r.climb %}<div><dt>Most climbing</dt><dd><a href="{% url 'activity' r.climb.activity_id %}">{{ r.climb.elev_gain_m|num }} m</a><span>{{ r.climb.start_local|nicedate }}</span></dd></div>{% endif %}
+      {% if r.big_week %}<div><dt>Biggest week</dt><dd>{{ r.big_week.km|kmv:1 }} km<span>week of {{ r.big_week.start|nicedate }}</span></dd></div>{% endif %}
+    </dl>
+  </section>
+  {% endfor %}
+
+  <section class="panel">
+    <div class="panel-head"><h2>Your year, month by month</h2><span class="panel-note">Hours per calendar month, all years together</span></div>
+    <div class="chart" id="chart-months" style="height:240px"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Heart rate zones</h2>{% if data.zones %}<span class="panel-note">From your Garmin settings{% if data.zones.max %}, max {{ data.zones.max|num }} bpm{% endif %}</span>{% elif data.floors %}<span class="panel-note">Estimated from your highest heart rate</span>{% endif %}</div>
+    {% if data.floors %}
+    <ol class="zone-list zone-list-static">
+      {% for f in data.floors %}
+      <li class="zl-{{ forloop.counter }}"><span class="zone-key"></span><span class="zone-name">Zone {{ forloop.counter }}</span>
+        <span class="zone-bpm">{{ f|num }}{% if not forloop.last %}-{{ data.floors|get_index:forloop.counter|add:-1|num }}{% else %}+{% endif %} bpm</span></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="panel-note">No heart rate data yet.</p>{% endif %}
+    {% if data.fitness_age %}
+    <div class="fitness-age">
+      <p class="kpi-label">Fitness age</p>
+      <p class="kpi-value">{{ data.fitness_age.fitness_age|num:1 }}</p>
+      <p class="kpi-meta">{% if data.fitness_age.chrono_age %}You are {{ data.fitness_age.chrono_age|num }}. {% endif %}{% if data.fitness_age.achievable %}Garmin says {{ data.fitness_age.achievable|num:1 }} is within reach.{% endif %}</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if data.weights %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Weight</h2></div>
+    <div class="chart" id="chart-weight" style="height:220px"></div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% endif %}{% endblock %}

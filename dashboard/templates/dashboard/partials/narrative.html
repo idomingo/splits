@@ -1,0 +1,7 @@
+{% load fmt %}<section class="narrative" aria-label="{{ title }}">
+  <h2>{{ title }}</h2>
+  {% if text %}<p>{{ text|linebreaksbr }}</p>{% else %}
+  <p class="placeholder-text">{% lorem seed sentences %}</p>
+  {% if more %}<p class="placeholder-text">{% lorem seed|add:"b" 2 %}</p>{% endif %}
+  {% endif %}
+</section>

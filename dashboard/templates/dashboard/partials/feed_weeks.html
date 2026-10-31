@@ -1,0 +1,49 @@
+{% load fmt %}{% for w in weeks %}
+<section class="week" aria-label="Week of {{ w.start|date:'j M Y' }}">
+  <header class="week-head">
+    <h3>{% if w.start.month == w.end.month %}{{ w.start|date:"j" }}-{{ w.end|date:"j M" }}{% else %}{{ w.start|date:"j M" }} - {{ w.end|date:"j M" }}{% endif %}{% if w.start.year != w.end.year or w.end.year != today_year %} <span class="week-year">{{ w.end|date:"Y" }}</span>{% endif %}</h3>
+    <dl class="week-stats">
+      {% if w.km %}<div><dt>Distance</dt><dd>{{ w.km|kmv:1 }} km</dd></div>{% endif %}
+      <div><dt>Time</dt><dd>{{ w.secs|hm }}</dd></div>
+      <div><dt>Activities</dt><dd>{{ w.count }}</dd></div>
+    </dl>
+    <div class="week-ribbon">{% zone_ribbon w.zones "sm" %}</div>
+  </header>
+  <ol class="cards">
+    {% for a in w.acts %}
+    <li>
+      <a class="card sport-{{ a.category }}" href="{% url 'activity' a.activity_id %}">
+        <div class="card-thumb" aria-hidden="true">
+          {% if a.route_svg %}<svg viewBox="0 0 100 100"><path d="{{ a.route_svg }}"/></svg>{% else %}{% sport_icon a.category "icon icon-lg" %}{% endif %}
+        </div>
+        <div class="card-body">
+          <div class="card-top">
+            <h4>{% if a.name %}{{ a.name }}{% else %}{{ a.type_key|typelabel }}{% endif %}</h4>
+            {% if a.kind_label %}<span class="chip chip-kind grp-{{ a.kind|kindgroup }}">{{ a.kind_label }}</span>{% elif a.event_type == "race" %}<span class="chip chip-race">Race</span>{% endif %}
+            {% if a.te_label|telabel %}<span class="chip">{{ a.te_label|telabel }}</span>{% endif %}
+            <time datetime="{{ a.start_local|date:'c' }}">{{ a.start_local|nicedate }}, {{ a.start_local|date:"H:i" }}</time>
+          </div>
+          <dl class="card-stats">
+            {% if a.distance_m %}<div><dt>Distance</dt><dd>{{ a.distance_m|km }}<small> km</small></dd></div>{% endif %}
+            <div><dt>Time</dt><dd>{{ a.time_s|dur }}</dd></div>
+            {% if a.distance_m and a.category|uses_pace %}<div><dt>Pace</dt><dd>{{ a.pace_s_per_km|pace }}<small> /km</small></dd></div>
+            {% elif a.distance_m %}<div><dt>Speed</dt><dd>{{ a.speed_kmh|speed }}<small> km/h</small></dd></div>{% endif %}
+            {% if a.avg_hr %}<div><dt>Avg HR</dt><dd>{{ a.avg_hr|num }}<small> bpm</small></dd></div>{% endif %}
+            {% if a.elev_gain_m %}<div class="hide-sm"><dt>Climb</dt><dd>{{ a.elev_gain_m|num }}<small> m</small></dd></div>{% endif %}
+            {% if a.training_load %}<div class="hide-sm"><dt>Load</dt><dd>{{ a.training_load|num }}</dd></div>{% endif %}
+          </dl>
+          {% zone_ribbon a.zone_seconds "sm" %}
+          {% with w=a.wx %}{% if w %}<p class="card-wx"><span>{{ w.temp_c|num }}°C</span>{% if w.weather_code is not None %}<span>{{ w.weather_code|wmo }}</span>{% endif %}<span>wind {{ w.wind_kmh|num }} km/h {{ w.wind_dir|compass }}</span>{% if w.precip_mm and w.precip_mm >= 0.1 %}<span>{{ w.precip_mm|num:1 }} mm rain</span>{% endif %}</p>{% endif %}{% endwith %}
+          <p class="card-text placeholder-text">{% if a.narrative %}{{ a.narrative }}{% else %}{% lorem a.activity_id 1 %}{% endif %}</p>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endfor %}
+{% if cursor %}
+<div class="feed-more" data-url="{% url 'feed_more' %}?before={{ cursor|urlencode }}{% if feed_category %}&amp;category={{ feed_category }}{% endif %}{% if feed_kind %}&amp;kind={{ feed_kind }}{% endif %}{% if feed_place %}&amp;place={{ feed_place }}{% endif %}">
+  <button type="button" class="btn">Show earlier weeks</button>
+</div>
+{% endif %}

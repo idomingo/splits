@@ -1,0 +1,228 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Health{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Health</h1>
+  <p class="page-sub">Sleep, heart, breathing and recovery, every day your watch was on</p>
+</header>
+{% if data.empty %}
+<section class="empty"><p>No health data yet. It arrives with the next sync.</p></section>
+{% else %}
+<div class="filters" role="group" aria-label="Date range">
+  <button type="button" class="seg-btn" data-range="30">30 days</button>
+  <button type="button" class="seg-btn is-on" data-range="90">90 days</button>
+  <button type="button" class="seg-btn" data-range="365">1 year</button>
+  <button type="button" class="seg-btn" data-range="0">All</button>
+</div>
+
+{% include "dashboard/partials/tiles.html" with tiles=data.tiles %}
+
+{% include "dashboard/partials/narrative.html" with title="How you are recovering" seed="health" sentences=2 more=True text=narrative %}
+
+<p class="health-note">These are watch estimates, useful for spotting your own trends. They are not medical measurements; anything that worries you is one for a doctor.</p>
+
+<div class="grid grid-2">
+  {% if data.sleep.dates %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Sleep</h2><span class="panel-note" data-agg-note></span></div>
+    <div class="chart" id="chart-sleep" style="height:260px"></div>
+    <div class="explain">
+      <p>Time in each sleep stage per night, estimated from heart rate, heart rate variability and movement. Deep sleep does most of the physical repair, REM sleep helps memory and mood, and light sleep fills the rest. A few short wake-ups are normal.</p>
+      <ul class="scale">
+        <li><b>Low</b>Under 6 hours, or deep sleep under about 15% of the night, for several nights in a row.</li>
+        <li><b>Normal</b>7 to 9 hours for most adults. Garmin's targets for you: deep 16 to 33%, REM 21 to 31%, light 30 to 64%.</li>
+        <li><b>High</b>More than 9 hours often. Common after hard training or when ill, otherwise worth noticing.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Sleep score</h2></div>
+    <div class="chart" id="chart-sleep-score" style="height:220px"></div>
+    <div class="explain">
+      <p>Garmin's 0 to 100 rating of each night, from how long you slept, the stages, how restless you were and your stress during sleep.</p>
+      <ul class="scale">
+        <li><b>Poor</b>Below 60.</li>
+        <li><b>Fair to good</b>60 to 79 is fair, 80 to 89 is good.</li>
+        <li><b>Excellent</b>90 and above.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Sleep against sleep need</h2></div>
+    <div class="chart" id="chart-sleep-need" style="height:220px"></div>
+    <div class="explain">
+      <p>Bars are what you slept; the line is how much Garmin thinks you needed that night. Your need goes up after hard training, short nights or a stressful day.</p>
+      <ul class="scale">
+        <li><b>Below the line</b>You are building sleep debt. One night does not matter; a week of it does.</li>
+        <li><b>On the line</b>You slept about what your body asked for.</li>
+        <li><b>Above</b>Catching up, usually after a hard day or a short night.</li>
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if data.daily.dates %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Heart rate</h2><span class="panel-note">Daily range, resting and sleeping heart rate</span></div>
+    <div class="chart" id="chart-hr" style="height:260px"></div>
+    <div class="explain">
+      <p>The shaded band runs from your lowest to your highest heart rate each day. The red line is your resting heart rate: the lowest steady rate while you rest, mostly measured at night. The purple line is your average while asleep.</p>
+      <ul class="scale">
+        <li><b>Resting, low</b>40 to 60 bpm is common in trained endurance athletes. Lower over months usually means fitter.</li>
+        <li><b>Resting, typical</b>60 to 100 bpm for adults in general. Compare with your own normal, not with others.</li>
+        <li><b>Resting, high for you</b>5 bpm or more above your normal for a few days often comes with fatigue, illness, alcohol, heat or poor sleep.</li>
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if data.hrv.dates %}
+  <section class="panel">
+    <div class="panel-head"><h2>Heart rate variability</h2>{% if data.hrv_last.status %}<span class="panel-note">Status: {{ data.hrv_last.status|title }}</span>{% endif %}</div>
+    <div class="chart" id="chart-hrv" style="height:220px"></div>
+    <div class="explain">
+      <p>How much the time between heartbeats varies overnight, in milliseconds. More variation usually means a rested, relaxed nervous system. Values differ a lot between people, so only compare with yourself: the green band is your own normal range.</p>
+      <ul class="scale">
+        <li><b>Below your band</b>Stress, hard training, illness, alcohol or poor sleep. Take it as a hint to go easier.</li>
+        <li><b>Inside</b>Balanced. Normal training is fine.</li>
+        <li><b>Above</b>Often after rest days. Usually fine on its own.</li>
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+  {% if data.vo2.running %}
+  <section class="panel">
+    <div class="panel-head"><h2>VO2max</h2><span class="panel-note">Running, ml per kg per minute</span></div>
+    <div class="chart" id="chart-vo2" style="height:220px"></div>
+    <div class="explain">
+      <p>Garmin's estimate of the most oxygen your body can use, worked out on runs with heart rate and GPS. Garmin shows it rounded; the decimals come from your activity files. It moves slowly, so judge it over months.</p>
+      <ul class="scale">
+        <li><b>Going down</b>A drop of 1 or more over a few weeks: a break, illness, or runs in heat and wind, which make the estimate look worse.</li>
+        <li><b>Flat</b>Normal from week to week.</li>
+        <li><b>Going up</b>A rise of 1 to 2 over a few months is real progress.</li>
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if data.daily.dates %}
+  <section class="panel">
+    <div class="panel-head"><h2>Pulse ox</h2><span class="panel-note">Blood oxygen, mostly measured overnight</span></div>
+    <div class="chart" id="chart-spo2" style="height:220px"></div>
+    <div class="explain">
+      <p>The share of your blood's haemoglobin carrying oxygen, measured with light at the wrist. Daily average and the lowest reading of the day.</p>
+      <ul class="scale">
+        <li><b>Low</b>Readings that stay below 90% are worth raising with a doctor. Single low dips at night are common with wrist sensors (arm position, loose strap).</li>
+        <li><b>Normal</b>95 to 100% for healthy adults near sea level; low 90s at night is common on a watch.</li>
+        <li><b>High</b>100% is the maximum.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Breathing rate</h2><span class="panel-note">Breaths per minute</span></div>
+    <div class="chart" id="chart-resp" style="height:220px"></div>
+    <div class="explain">
+      <p>How many breaths you take per minute: the daily average while awake and the average while asleep.</p>
+      <ul class="scale">
+        <li><b>Low</b>Under about 10 while awake at rest is unusual; during sleep, lower values are normal.</li>
+        <li><b>Normal</b>About 12 to 20 at rest for adults, a bit lower asleep.</li>
+        <li><b>High for you</b>2 or more above your usual for several days can come with illness, alcohol or heavy training.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Stress</h2><span class="panel-note">Daily average, 0 to 100</span></div>
+    <div class="chart" id="chart-stress" style="height:220px"></div>
+    <div class="explain">
+      <p>Garmin's stress level from your heart rate variability while you are not exercising. It reacts to mental stress, but also to caffeine, digestion, illness and recovering from training.</p>
+      <ul class="scale">
+        <li><b>Rest</b>0 to 25.</li>
+        <li><b>Low to medium</b>26 to 50 is low, 51 to 75 is medium.</li>
+        <li><b>High</b>76 to 100.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Stress through the day</h2><span class="panel-note">Hours in each stress level</span></div>
+    <div class="chart" id="chart-stress-mix" style="height:220px"></div>
+    <div class="explain">
+      <p>How your measured hours split between rest, low, medium and high stress each day. Sleep normally counts as rest.</p>
+      <ul class="scale">
+        <li><b>Good day</b>Plenty of rest hours, with stress in short bursts.</li>
+        <li><b>Mixed</b>Medium and high blocks during work hours are normal.</li>
+        <li><b>Watch</b>Days with little rest, several in a row.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Body battery</h2><span class="panel-note">Daily high and low</span></div>
+    <div class="chart" id="chart-bb" style="height:220px"></div>
+    <div class="explain">
+      <p>Garmin's 0 to 100 estimate of your energy reserve. Sleep and rest charge it; activity and stress drain it. The high usually comes after sleep.</p>
+      <ul class="scale">
+        <li><b>Low</b>A morning high under 50, or ending days below 25.</li>
+        <li><b>Normal</b>Morning highs of 60 to 80.</li>
+        <li><b>High</b>Morning highs of 80 to 100: well recovered.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Steps</h2><span class="panel-note">Line: your Garmin step goal</span></div>
+    <div class="chart" id="chart-steps" style="height:220px"></div>
+    <div class="explain">
+      <p>Steps counted by the watch through the day, runs included. Garmin moves your goal up or down based on recent days.</p>
+      <ul class="scale">
+        <li><b>Low</b>Under about 5,000 a day.</li>
+        <li><b>Normal</b>About 7,000 to 10,000 a day is where most of the health benefit shows up in studies.</li>
+        <li><b>High</b>Above 10,000. More is fine, but the extra benefit gets smaller.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Floors climbed</h2><span class="panel-note">From the barometer</span></div>
+    <div class="chart" id="chart-floors" style="height:220px"></div>
+    <div class="explain">
+      <p>Each floor is about 3 m of climbing on foot, measured by the watch's air pressure sensor (stairs, hills, your estate). Weather changes can add or remove the odd floor.</p>
+      <ul class="scale">
+        <li><b>Low</b>0 to 3: a flat day.</li>
+        <li><b>Normal</b>Garmin's default goal is 10 floors.</li>
+        <li><b>High</b>20 or more: hilly runs or walks.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Intensity minutes</h2><span class="panel-note">Per week, moderate plus vigorous</span></div>
+    <div class="chart" id="chart-im" style="height:220px"></div>
+    <div class="explain">
+      <p>Minutes at a moderate or vigorous effort, counted in blocks of at least 10 minutes. Vigorous minutes count double, as in the World Health Organization guideline.</p>
+      <ul class="scale">
+        <li><b>Low</b>Under 150 a week.</li>
+        <li><b>Normal</b>150 to 300 a week: the guideline for adults.</li>
+        <li><b>High</b>Over 300 a week: typical in training blocks.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Calories</h2><span class="panel-note">Resting and active, per day</span></div>
+    <div class="chart" id="chart-kcal" style="height:220px"></div>
+    <div class="explain">
+      <p>Resting calories are what your body burns to keep running (estimated from weight, height, age and sex). Active calories are movement and exercise, from heart rate and motion.</p>
+      <ul class="scale">
+        <li><b>Low</b>Mostly resting calories: a quiet day.</li>
+        <li><b>Normal</b>Several hundred active calories on a normal day.</li>
+        <li><b>High</b>Long runs and race days can add 1,000 or more.</li>
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+  {% if data.weight %}
+  <section class="panel">
+    <div class="panel-head"><h2>Weight</h2></div>
+    <div class="chart" id="chart-weight" style="height:220px"></div>
+    <div class="explain"><p>Only the days you logged a weight in Garmin Connect.</p></div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% endif %}{% endblock %}

@@ -1,0 +1,11 @@
+{% if kind == "race" %}Races and solo time trials. A run counts when it is marked as a race in Garmin Connect, when most of it is in heart rate zone 5, or when it is a hard, continuous effort at a standard distance (3 km, 5 km, 10 km, 15 km, half or full marathon) close to your best for that distance.
+{% elif kind == "threshold" %}Sessions with two or more fast blocks averaging three minutes or more (like 2 x 10 min or 3 x 2 km), or one continuous tempo block of eight minutes or more. Fast means at least 18% quicker than your own easy pace.
+{% elif kind == "intervals" %}Fast repeats under three minutes on average, such as 400 m or 800 m reps.
+{% elif kind == "progression" %}Runs that get steadily faster, finishing well under your easy pace.
+{% elif kind == "long" %}Runs of 90 minutes or more, or at least an hour and one and a half times the length of your usual run over the six weeks before. Includes long runs with a fast finish.
+{% elif kind == "steady" %}Continuous runs mostly in heart rate zones 3 to 5 without any structure: harder than easy, easier than threshold.
+{% elif kind == "easy" %}Runs mostly in heart rate zones 1 and 2, sometimes with strides at the end.
+{% elif kind == "recovery" %}Short, easy runs: under 35 minutes and shorter than most of your recent runs.
+{% elif kind == "strides" %}Short fast bursts recorded as their own activity, straight after another run.
+{% elif kind == "warmup" %}Runs under 35 minutes just before or after a longer run the same day.
+{% endif %}

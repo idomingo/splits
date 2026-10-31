@@ -1,0 +1,11 @@
+{% load fmt %}<div class="tiles">
+  {% for t in tiles %}
+  <div class="tile">
+    <p class="tile-label">{{ t.label }}</p>
+    <p class="tile-value">{% if t.fmt == "hours" %}{{ t.value|dur_hours }}{% else %}{{ t.value|num:t.digits }}{% endif %}{% if t.unit %}<small> {{ t.unit }}</small>{% endif %}</p>
+    <p class="tile-meta">{% if t.avg7 is not None %}7-day average {% if t.fmt == "hours" %}{{ t.avg7|dur_hours }}{% else %}{{ t.avg7|num:t.digits }}{% endif %}{% else %}{{ t.date|nicedate }}{% endif %}</p>
+    {% if t.delta is not None %}<p class="tile-delta"><span class="delta {% if t.good %}is-good{% elif t.good is False %}is-bad{% endif %}">{% if t.fmt == "hours" %}{{ t.delta|signed_hm }}{% else %}{{ t.delta|signed:t.digits }}{% endif %}</span> vs the month before</p>{% endif %}
+    <div class="spark" data-spark="{{ t.spark|join:',' }}" aria-hidden="true"></div>
+  </div>
+  {% endfor %}
+</div>

@@ -1,0 +1,75 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+{% if data.empty %}
+<section class="empty">
+  <h1 class="display">Your training, all in one place</h1>
+  <p>Nothing here yet. Fetch your Garmin history to fill this page: every activity, your sleep, heart rate and more.</p>
+  <p class="hint">The first sync downloads everything since your first activity, so it can take a while. Activities show up here as soon as the list is in; the detailed recordings and health data keep loading in the background.</p>
+  {% if not key_set %}<p class="hint">First add your key to the <code>.env</code> file in the project folder, then come back.</p>{% endif %}
+  <button type="button" class="btn btn-primary" data-sync-trigger>Fetch my history</button>
+</section>
+{% else %}
+{% with w=data.week %}
+<section class="hero" aria-label="This week">
+  <div class="hero-main">
+    <p class="hero-kicker">This week</p>
+    <p class="hero-figure">{{ w.totals.secs|hm }}</p>
+    <p class="hero-sub">
+      {% if w.totals.km %}{{ w.totals.km|kmv:1 }} km in {% endif %}{{ w.totals.count }} activit{{ w.totals.count|pluralize:"y,ies" }}.
+      Your 4-week average is {{ w.avg_prev_hours|dur_hours }} a week.
+    </p>
+    <ul class="hero-sports">
+      {% for s in w.by_sport %}
+      <li class="sport-{{ s.cat }}"><span class="dot"></span>{{ s.label }} <strong>{% if s.km >= 0.1 %}{{ s.km|kmv:1 }} km{% else %}{{ s.secs|hm }}{% endif %}</strong></li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="week-strip" role="list" aria-label="Days this week">
+    {% for d in w.days %}
+    <div class="day{% if d.future %} is-future{% endif %}" role="listitem">
+      <div class="day-stack">
+        {% for x in d.acts %}<a class="day-block sport-{{ x.cat }}" href="{% url 'activity' x.id %}" style="--m:{{ x.min }}" title="{{ x.name }}: {{ x.min }} min{% if x.km %}, {{ x.km }} km{% endif %}"></a>{% endfor %}
+      </div>
+      <span class="day-label">{{ d.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endwith %}
+
+{% include "dashboard/partials/narrative.html" with title="Summary" seed="overview" sentences=3 more=False text=narrative %}
+
+<div class="grid grid-2">
+  <section class="panel span-2">
+    <div class="panel-head">
+      <h2>Weekly volume</h2>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" class="seg-btn is-on" data-weekly="hours">Time</button>
+        <button type="button" class="seg-btn" data-weekly="km">Distance</button>
+      </div>
+    </div>
+    <div class="chart" id="chart-weekly" style="height:280px"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Training load</h2></div>
+    <p class="panel-note">Last 7 days against your last 6 weeks. When the 7-day line runs well above, you are building; well below, you are resting.</p>
+    <div class="chart" id="chart-load" style="height:240px"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Health now</h2><a class="link" href="{% url 'health' %}">All health data</a></div>
+    {% include "dashboard/partials/tiles.html" with tiles=data.tiles|slice:":4" %}
+  </section>
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Activity calendar</h2><span class="panel-note">Minutes of activity per day</span></div>
+    <div class="chart" id="chart-calendar" style="height:190px"></div>
+  </section>
+</div>
+
+<section class="feed" aria-label="Activities">
+  <div class="section-head"><h2 class="section-title">Activities</h2></div>
+  <div class="feed-list">{% include "dashboard/partials/feed_weeks.html" %}</div>
+</section>
+{% endif %}
+{% endblock %}
+{% block data %}{% if not data.empty %}{{ data|json_script:"page-data" }}{% endif %}{% endblock %}
