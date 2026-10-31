@@ -10,16 +10,11 @@ from django.views.decorators.http import require_POST
 from . import analytics
 from .maps import map_config
 from .garmin.sync import current_run, start_background_sync
-from .models import Activity, Narrative, Place, SyncRun
+from .models import Activity, Place, SyncRun
 from .places import resolve_area
 from .sports import CATEGORY_LABEL, CATEGORY_TO_SLUG, PACE_CATEGORIES, SLUG_TO_CATEGORY
 
 FEED_BATCH = 40
-
-
-def _narrative(key):
-    n = Narrative.objects.filter(key=key).first()
-    return n.text if n and n.text else ""
 
 
 def feed_weeks(category=None, before=None, kind=None, area=None):
@@ -65,7 +60,6 @@ def overview(request):
     weeks, cursor = feed_weeks()
     return render(request, "dashboard/overview.html", {
         "page": "overview", "data": data, "weeks": weeks, "cursor": cursor, "feed_category": "",
-        "narrative": _narrative("overview"),
     })
 
 
@@ -85,7 +79,7 @@ def sport(request, slug, kind=None):
         "json": {k: v for k, v in data.items() if k not in ("longest", "first_date", "last_date", "pbs", "where", "where_countries")},
         "weeks": weeks, "cursor": cursor, "feed_category": category, "feed_kind": kind or "",
         "feed_place": area.slug if area else "",
-        "pace_mode": category in PACE_CATEGORIES, "narrative": _narrative(f"{category}:{kind}" if kind else category),
+        "pace_mode": category in PACE_CATEGORIES,
     })
 
 
@@ -114,6 +108,16 @@ def set_run_type(request, activity_id):
     act.run_type_manual = value if value in RUN_TYPE_LABEL else ""
     act.save(update_fields=["run_type_manual"])
     return redirect("activity", activity_id=act.pk)
+
+
+def export_activity(request, activity_id):
+    """The run as a Markdown file for AI tools (descriptive Markdown plus CSV for the per-second data)."""
+    from django.http import HttpResponse
+    from .export import activity_markdown, content_disposition, filename
+    act = get_object_or_404(Activity.objects.select_related("stream", "place"), pk=activity_id, category="run")
+    resp = HttpResponse(activity_markdown(act), content_type="text/markdown; charset=utf-8")
+    resp["Content-Disposition"] = content_disposition(filename(act))
+    return resp
 
 
 def activity(request, activity_id):
@@ -187,15 +191,13 @@ def personal(request):
     data = analytics.personal()
     return render(request, "dashboard/personal.html", {"page": "personal", "data": data,
                                                        "json": _json_safe(data, "fitness_age", "records", "year_rows", "pbs",
-                                                                          "first", "streak", "zones", "life"),
-                                                       "narrative": _narrative("personal")})
+                                                                          "first", "streak", "zones", "life")})
 
 
 def health(request):
     data = analytics.health()
     return render(request, "dashboard/health.html", {"page": "health", "data": data,
-                                                     "json": _json_safe(data, "hrv_last"),
-                                                     "narrative": _narrative("health")})
+                                                     "json": _json_safe(data, "hrv_last")})
 
 
 # ---------- sync ----------

@@ -1,4 +1,3 @@
-import hashlib
 from datetime import date, datetime
 
 from django import template
@@ -202,23 +201,6 @@ def zone_ribbon(zones, size="sm"):
         label.append(f"zone {i + 1} {round(p)}%")
         parts.append(f'<span class="z{i + 1}" style="flex-grow:{p:.2f}"></span>')
     return mark_safe(f'<div class="ribbon ribbon-{size}" role="img" aria-label="Heart rate: {", ".join(label)}">{"".join(parts)}</div>')
-
-
-LOREM = [
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-    "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
-    "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
-    "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-    "Curabitur pretium tincidunt lacus. Nulla gravida orci a odio, et tempus feugiat lectus vitae nibh.",
-    "Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula donec lobortis.",
-]
-
-
-@register.simple_tag
-def lorem(seed="x", sentences=1):
-    h = int(hashlib.md5(str(seed).encode()).hexdigest(), 16)
-    n = int(sentences)
-    return " ".join(LOREM[(h + i) % len(LOREM)] for i in range(n))
 
 
 @register.simple_tag

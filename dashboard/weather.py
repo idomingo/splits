@@ -221,11 +221,13 @@ def _bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 
-def headwind_series(act, w):
+def headwind_series(act, w, data=None):
     """Headwind (+) / tailwind (-) in km/h at each sample, from your direction of travel.
-    Uses the wind at the middle of the activity (wind is from the model grid, at 10 m)."""
-    stream = getattr(act, "stream", None)
-    data = stream.data if stream else {}
+    Uses the wind at the middle of the activity (wind is from the model grid, at 10 m).
+    data: {"t", "lat", "lon"} lists to use instead of the stored chart copy (the full recording, say)."""
+    if data is None:
+        stream = getattr(act, "stream", None)
+        data = stream.data if stream else {}
     lat, lon, t = data.get("lat"), data.get("lon"), data.get("t")
     speed, wfrom = (w.get("wind_kmh") if isinstance(w, dict) else w.wind_kmh), (
         w.get("wind_dir") if isinstance(w, dict) else w.wind_dir)
@@ -258,15 +260,16 @@ def headwind_series(act, w):
 
 
 def heat_cost(temp_c, dew_c):
-    """Rule of thumb from runners' temperature + dew point (both in F) guide:
-    returns (sum_f, expected slowdown % range as text)."""
+    """Runners' rule of thumb on temperature + dew point, in Celsius: returns (sum in °C, expected slowdown
+    as text). The guide is usually given in Fahrenheit (no effect up to 100 °F combined, then about every
+    10 °F); these are the same bands converted, since the sum of two °F values is 1.8 * sum °C + 64."""
     if temp_c is None or dew_c is None:
         return None, ""
-    s = (temp_c * 9 / 5 + 32) + (dew_c * 9 / 5 + 32)
-    bands = [(100, "no effect"), (110, "0 to 0.5% slower"), (120, "0.5 to 1% slower"), (130, "1 to 2% slower"),
-             (140, "2 to 3% slower"), (150, "3 to 4.5% slower"), (160, "4.5 to 6% slower"),
-             (170, "6 to 8% slower"), (180, "8 to 10% slower")]
+    s = temp_c + dew_c
+    bands = [(20.0, "no effect"), (25.6, "0 to 0.5% slower"), (31.1, "0.5 to 1% slower"), (36.7, "1 to 2% slower"),
+             (42.2, "2 to 3% slower"), (47.8, "3 to 4.5% slower"), (53.3, "4.5 to 6% slower"),
+             (58.9, "6 to 8% slower"), (64.4, "8 to 10% slower")]
     for limit, text in bands:
         if s <= limit:
-            return round(s), text
-    return round(s), "too hot for hard running"
+            return round(s, 1), text
+    return round(s, 1), "too hot for hard running"

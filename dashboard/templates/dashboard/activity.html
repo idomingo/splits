@@ -11,6 +11,7 @@
   </span>
 </nav>
 <header class="act-head sport-{{ a.category }}">
+  {% if a.category == "run" %}<a class="btn act-download" href="{% url 'export_activity' a.activity_id %}" download title="One file with everything about this run: details, splits, weather and every recorded second. Ready to give to an AI tool."><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>Download for AI</span></a>{% endif %}
   <div class="act-title">
     <span class="act-icon">{% sport_icon a.category "icon icon-lg" %}</span>
     <div>
@@ -86,7 +87,6 @@
 </section>
 {% endif %}
 
-{% include "dashboard/partials/narrative.html" with title="About this session" seed=a.activity_id sentences=3 more=False text=a.narrative %}
 
 {% with w=d.weather %}{% if w %}
 <section class="panel weather-act">
@@ -102,7 +102,7 @@
       {% if w.headwind_kmh is not None %}<div><dt>On your route</dt><dd>{% if w.headwind_kmh < 0.5 and w.headwind_kmh > -0.5 %}Headwind and tailwind about even{% elif w.headwind_kmh >= 0 %}{{ w.headwind_kmh|num:1 }} km/h headwind on average{% else %}{{ w.headwind_kmh|neg|num:1 }} km/h tailwind on average{% endif %}<span>into the wind {{ w.headwind_share|mul100|num }}% of the time</span></dd></div>{% endif %}
       <div><dt>Rain during it</dt><dd>{% if w.precip_mm and w.precip_mm >= 0.05 %}{{ w.precip_mm|num:1 }} mm{% elif w.weather_code is not None and w.weather_code >= 51 %}A few drops{% else %}Dry{% endif %}<span>cloud cover {{ w.cloud_pct|num }}%</span></dd></div>
       <div><dt>Humidity</dt><dd>{{ w.humidity|num }}%<span>dew point {{ w.dew_point_c|num:1 }}°C</span></dd></div>
-      <div><dt>Heat effect</dt><dd>{{ w_heat.1|capfirst|default:"-" }}<span>temperature + dew point = {{ w_heat.0 }}°F (runners' rule of thumb)</span></dd></div>
+      <div><dt>Heat effect</dt><dd>{{ w_heat.1|capfirst|default:"-" }}<span>temperature + dew point = {{ w_heat.0 }} °C (runners' rule of thumb)</span></dd></div>
       <div><dt>Pressure</dt><dd>{{ w.pressure_msl|num }} hPa<span>{{ w.pressure_surface|num }} hPa at ground level</span></dd></div>
       {% if w.visibility_m is not None %}<div><dt>Visibility</dt><dd>{{ w.visibility_m|vis_km }} km</dd></div>{% endif %}
       {% if a.raw.avgElevation is not None %}<div><dt>Altitude</dt><dd>{{ a.raw.avgElevation|num }} m<span>{{ a.raw.minElevation|num }} to {{ a.raw.maxElevation|num }} m on the route</span></dd></div>{% endif %}

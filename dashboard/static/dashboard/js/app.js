@@ -747,6 +747,15 @@
 
     const wrap = document.getElementById("stream-charts");
     const entries = [];
+    // the charts move together, but only the one under the pointer shows the tooltip (it lists every channel)
+    let tipOwner = 0;
+    function setTipOwner(ci) {
+      if (ci === tipOwner) return;
+      const prev = entries[tipOwner], cur = entries[ci];
+      tipOwner = ci;
+      if (prev && prev.chart) prev.chart.setOption({ tooltip: { showContent: false } });
+      if (cur && cur.chart) cur.chart.setOption({ tooltip: { showContent: true } });
+    }
     channels.forEach((ch, ci) => {
       const valid = ch.vals.filter((v) => v != null);
       const avg = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
@@ -759,6 +768,7 @@
       const last = ci === channels.length - 1;
       el.style.height = (last ? 150 : 124) + "px";
       wrap.appendChild(el);
+      el.addEventListener("pointerenter", () => setTipOwner(ci));
       const e = chart(el, (t) => {
         const x = xs();
         const color = ch.color();
@@ -784,6 +794,7 @@
           textStyle: { fontFamily: t.font, color: t.ink2, fontSize: 12 },
           grid: { left: 54, right: 14, top: 8, bottom: last ? 26 : 6 },
           tooltip: Object.assign(tooltipBase(t), {
+            showContent: ci === tipOwner,
             formatter: (ps) => {
               const i = ps[0].dataIndex;
               const head = (axis === "d" ? num(x[i], 2) + " km" : dur(x[i])) + (axis === "d" ? ", " + dur(s.t[i]) : s.d ? ", " + num(s.d[i] / 1000, 2) + " km" : "");
@@ -968,6 +979,7 @@
 
     // route hover -> charts (the charts then move the cursor and the split row)
     function followFromMap(i) {
+      setTipOwner(0);
       const c = entries[0] && entries[0].chart;
       if (c) c.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: i });
       else if (mapApi) mapApi.setCursor(i);

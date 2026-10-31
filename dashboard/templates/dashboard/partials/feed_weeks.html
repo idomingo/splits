@@ -11,7 +11,7 @@
   </header>
   <ol class="cards">
     {% for a in w.acts %}
-    <li>
+    <li class="card-item{% if a.category == 'run' %} has-download{% endif %}">
       <a class="card sport-{{ a.category }}" href="{% url 'activity' a.activity_id %}">
         <div class="card-thumb" aria-hidden="true">
           {% if a.route_svg %}<svg viewBox="0 0 100 100"><path d="{{ a.route_svg }}"/></svg>{% else %}{% sport_icon a.category "icon icon-lg" %}{% endif %}
@@ -34,9 +34,9 @@
           </dl>
           {% zone_ribbon a.zone_seconds "sm" %}
           {% with w=a.wx %}{% if w %}<p class="card-wx"><span>{{ w.temp_c|num }}°C</span>{% if w.weather_code is not None %}<span>{{ w.weather_code|wmo }}</span>{% endif %}<span>wind {{ w.wind_kmh|num }} km/h {{ w.wind_dir|compass }}</span>{% if w.precip_mm and w.precip_mm >= 0.1 %}<span>{{ w.precip_mm|num:1 }} mm rain</span>{% endif %}</p>{% endif %}{% endwith %}
-          <p class="card-text placeholder-text">{% if a.narrative %}{{ a.narrative }}{% else %}{% lorem a.activity_id 1 %}{% endif %}</p>
         </div>
       </a>
+      {% if a.category == "run" %}<a class="card-download" href="{% url 'export_activity' a.activity_id %}" download title="Download this run for AI tools" aria-label="Download {{ a.start_local|date:'j M' }} run for AI tools"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>For AI</span></a>{% endif %}
     </li>
     {% endfor %}
   </ol>

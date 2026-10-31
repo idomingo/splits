@@ -8,6 +8,7 @@ urlpatterns = [
     path("sport/<slug:slug>/<slug:kind>/", views.sport, name="sport_kind"),
     path("activity/<int:activity_id>/runtype/", views.set_run_type, name="set_run_type"),
     path("activity/<int:activity_id>/", views.activity, name="activity"),
+    path("activity/<int:activity_id>/download/", views.export_activity, name="export_activity"),
     path("places/", views.places, name="places"),
     path("places/<slug:slug>/", views.place, name="place"),
     path("places/<slug:slug>/rename/", views.rename_place, name="rename_place"),

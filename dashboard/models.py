@@ -90,7 +90,6 @@ class Activity(models.Model):
     run_type_manual = models.CharField(max_length=16, blank=True)                 # set by you; wins
     run_type_reason = models.CharField(max_length=255, blank=True)
     run_type_info = models.JSONField(default=dict, blank=True)                    # fast blocks etc.
-    narrative = models.TextField(blank=True)  # filled by a later version; placeholder shown when empty
     place = models.ForeignKey(Place, null=True, blank=True, on_delete=models.SET_NULL, related_name="activities")
     route = models.JSONField(null=True, blank=True)          # simplified [[[lon, lat], ...], ...] for overview maps
     geo_version = models.SmallIntegerField(default=0)        # places.GEO_VERSION once place and route are set
@@ -337,14 +336,6 @@ class Weather(models.Model):
     headwind_share = models.FloatField(null=True, blank=True)  # share of time with > 5 km/h headwind
     hourly = models.JSONField(default=dict)                    # the hours around the activity
     error = models.CharField(max_length=255, blank=True)
-
-
-class Narrative(models.Model):
-    """Written summaries for a page section. Empty in v1 (placeholder text is shown)."""
-    key = models.CharField(max_length=64, primary_key=True)  # e.g. "overview", "run", "health"
-    title = models.CharField(max_length=128, blank=True)
-    text = models.TextField(blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
 
 class KeyValue(models.Model):

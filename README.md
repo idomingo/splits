@@ -1,7 +1,32 @@
+<a id="top"></a>
+
 # Splits
 
 A personal training dashboard built on Garmin's official Personal API. It pulls
-every activity and your daily health data into a local database, then shows:
+every activity and your daily health data into a local database.
+
+## Contents
+
+- [What it shows](#what-it-shows)
+- [Setup (macOS)](#setup)
+  - [Get your Garmin Personal API key](#garmin-key)
+  - [Maps: get a CARTO key and URLs (optional)](#carto-key)
+- [Use](#use)
+- [Download a run for AI tools](#download)
+- [How runs are sorted](#run-kinds)
+- [Places](#places)
+- [Weather](#weather)
+- [How the Garmin side works](#garmin-side)
+- [Project layout](#layout)
+  - [Testing without Garmin](#testing)
+- [License](#license)
+- [Credits](#credits)
+
+<a id="what-it-shows"></a>
+
+## What it shows
+
+It shows:
 
 - **Overview**: this week against your recent weeks, weekly volume by sport,
   training load, a year of activity, health at a glance, and a feed of every
@@ -24,21 +49,25 @@ every activity and your daily health data into a local database, then shows:
   efforts inside the session and how it compares with your last 90 days.
 - **Personal**: lifetime totals, streaks, personal bests, records per sport,
   year by year, month by month and day by day, heart rate zones, fitness age, weight.
+- **Download for AI**: every run has a button that downloads one Markdown file
+  with everything about it, ready to give to ChatGPT, Claude or any other AI
+  tool (see below).
 - **Health**: sleep and sleep need, heart rate (resting, asleep, daily range),
   HRV, VO2max, pulse ox, breathing rate, stress and its levels through the day,
   body battery, steps, floors, intensity minutes, calories, weight, each with a
   short note on how to read it, and 30 days to all-time views.
 
-Text sections show placeholder text for now; they are stored in the database
-(`Narrative` and `Activity.narrative`) and the pages show them when they are filled.
-
 Everything runs on your own computer. The Garmin key, the database and the
 downloaded activity files stay in this folder and are excluded from git.
 
+
+[Back to top](#top)
+
+<a id="setup"></a>
+
 ## Setup (macOS)
 
-1. Create a Personal API key at
-   <https://connect.garmin.com/app/settings/personalApiToken> (Garmin shows it once).
+1. Get a Garmin Personal API key ([how](#garmin-key)).
 2. In this folder:
 
    ```bash
@@ -46,8 +75,9 @@ downloaded activity files stay in this folder and are excluded from git.
    ```
 
    It creates `.venv`, installs three packages (Django, requests, fitdecode),
-   creates the database and an `.env` file.
-3. Paste the key into `.env` after `GARMIN_PERSONAL_API_KEY=` (no quotes, no spaces).
+   creates the database and an `.env` file (a copy of `.env.example`).
+3. Open `.env` in a text editor and paste the key after `GARMIN_PERSONAL_API_KEY=`
+   (no quotes, no spaces). `.env` is in `.gitignore`, so it is never committed.
 4. Check the key and see which data Garmin returns:
 
    ```bash
@@ -56,21 +86,62 @@ downloaded activity files stay in this folder and are excluded from git.
 
    The output shows status codes and field names only, never the key or your values.
 
-### Maps (optional)
+<a id="garmin-key"></a>
 
-The activity map uses CARTO basemaps when a key is set. Get a free key at
-<https://carto.com/basemaps/apikey/> and add it to `.env`:
+### Get your Garmin Personal API key
 
-```
-CARTO_API_KEY=...
-CARTO_VECTOR_STYLE_URL=https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json?key=...
-CARTO_RASTER_TILE_URL=https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=...
-```
+The app only reads from Garmin; the key cannot change anything in your account.
 
-The vector style is drawn with MapLibre (sharp at every zoom, dark-matter style
-in dark mode). The raster URL is the fallback when the vector style cannot load,
-and without any key the map uses OpenStreetMap's own tiles. The key is sent to
-the browser with each CARTO request, which is how CARTO keys work.
+1. Sign in to [Garmin Connect](https://connect.garmin.com) in a browser with the
+   account your watch syncs to.
+2. Open <https://connect.garmin.com/app/settings/personalApiToken> (Settings,
+   then the Personal API token page).
+3. Create a new key. If Garmin asks for a name or an expiry, any name works;
+   a longer expiry means renewing it less often (keys last 30 days to 1 year).
+4. Copy the key straight away: Garmin shows it only once. If you lose it, delete
+   it on the same page and create another.
+5. Paste it into `.env` as `GARMIN_PERSONAL_API_KEY=...` and run `./check.sh`.
+
+Treat the key like a password: do not paste it into chats, issues or screenshots.
+When it expires the sync says the key was rejected; create a new one and replace
+the line in `.env`.
+
+<a id="carto-key"></a>
+
+### Maps: get a CARTO key and URLs (optional)
+
+Without anything set, maps use OpenStreetMap's own tiles and work fine. A free
+CARTO key gives cleaner basemaps, sharp at every zoom, with a dark style in dark mode.
+
+1. Go to <https://carto.com/basemaps/apikey/>, sign up or sign in, and create a
+   basemaps API key (the free tier is enough for personal use).
+2. Add it to `.env`:
+
+   ```
+   CARTO_API_KEY=your-key
+   ```
+
+   That alone is enough: the app uses the Voyager style and its dark-matter
+   counterpart, and adds the key to every CARTO request.
+3. Optional, to pick another style, set the URLs as well (replace `YOUR_KEY`):
+
+   ```
+   CARTO_VECTOR_STYLE_URL=https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json?key=YOUR_KEY
+   CARTO_VECTOR_STYLE_URL_DARK=https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json?key=YOUR_KEY
+   CARTO_RASTER_TILE_URL=https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=YOUR_KEY
+   ```
+
+   Other CARTO styles are `positron` and `dark-matter` in the same URL pattern
+   (for example `.../gl/positron-gl-style/style.json`).
+4. Restart `./run.sh`.
+
+The vector style is drawn with MapLibre. The raster URL is the fallback when the
+vector style cannot load. The key is sent to the browser with each CARTO
+request, which is how CARTO keys work, so restrict it to your own use.
+
+[Back to top](#top)
+
+<a id="use"></a>
 
 ## Use
 
@@ -95,6 +166,47 @@ Want to look around first? `./run.sh demo` uses a separate demo database
 lives in Amsterdam and travels a few times a year. Delete that file to build it
 again after an update.
 
+
+[Back to top](#top)
+
+<a id="download"></a>
+
+## Download a run for AI tools
+
+The **Download for AI** button on each run (on its page and on every run card)
+saves a file named like `2026-10-25 08h29 Long run in Haarlem 19.8 km.md`. It
+has, in this order:
+
+- a short header and a one-paragraph description: what kind of run, where, when;
+- totals, running dynamics, Garmin's training effect and VO2max estimate;
+- time in heart rate zones, and why the run was sorted as that kind;
+- stretches where heart rate did not follow pace (for example a strap or an
+  optical sensor taking a few minutes to lock on), marked without judging which
+  reading is right; zone times, splits and laps then come with and without them;
+- aerobic decoupling (pace and power against heart rate, first half against
+  second half) for easy, recovery, steady and long runs;
+- the weather at the time and hour by hour, with headwind along the route;
+  the heat effect uses the temperature + dew point rule of thumb in °C;
+- splits per km worked out from the recording (pace, heart rate, cadence, power,
+  climb, ground contact, headwind), the watch's own laps and the best efforts;
+- when the GPS track clearly shows it, the two halves of an out-and-back route
+  or each lap of a circuit, with pace, heart rate and headwind for each;
+- training context: the four weeks before, every run in the 14 days before,
+  personal bests, and sleep, HRV, resting heart rate and body battery that day;
+- every summary field Garmin sends for the activity;
+- every point the watch recorded (usually one per second), as CSV.
+
+The descriptive parts are Markdown and the long tables are CSV, which costs AI
+tools fewer tokens than the same numbers as Markdown tables. GPS coordinates are
+left out on purpose, since a start point is often a front door. A long run
+recorded every second is a few hundred KB; tools that can run code (ChatGPT's
+data analysis, Claude's analysis tool) handle the per-second part best.
+
+
+[Back to top](#top)
+
+<a id="run-kinds"></a>
+
 ## How runs are sorted
 
 Nothing is tuned to one person. Every rule uses either the run itself (its heart
@@ -114,6 +226,11 @@ easy pace and usual run length over the weeks before, your best efforts):
 
 A kind you pick on the activity page always wins.
 
+
+[Back to top](#top)
+
+<a id="places"></a>
+
 ## Places
 
 Places are worked out on your computer from the start point of each activity,
@@ -123,6 +240,11 @@ counts for the city; anywhere outside a city's area gets the nearest town.
 Indoor sessions and anything without GPS have no place. Rename a place on its
 page if you prefer another name. To refresh the bundled lists from GeoNames, run
 `python devtools/build_geodata.py` (needs `pip install geonamescache`).
+
+
+[Back to top](#top)
+
+<a id="weather"></a>
 
 ## Weather
 
@@ -137,6 +259,11 @@ station on your street. To fetch it again for everything:
 ```bash
 python manage.py fetch_weather --all
 ```
+
+
+[Back to top](#top)
+
+<a id="garmin-side"></a>
 
 ## How the Garmin side works
 
@@ -155,6 +282,11 @@ python manage.py fetch_weather --all
 - Keys expire (30 days to 1 year). When the sync says the key was rejected,
   create a new one and replace it in `.env`.
 
+
+[Back to top](#top)
+
+<a id="layout"></a>
+
 ## Project layout
 
 ```
@@ -170,6 +302,7 @@ dashboard/
   static/dashboard/      CSS, JS, ECharts, Leaflet, Archivo font
   runtypes.py            how each run is sorted into a kind
   places.py              offline town and city lookup, place filters
+  export.py              one run as a Markdown file for AI tools
   geodata/               GeoNames towns and countries (CC BY 4.0)
   weather.py             Open-Meteo client, headwind along the route
   derive.py              fills in kinds and places missing after an update
@@ -178,6 +311,8 @@ dashboard/
 devtools/mock_garmin.py  a fake Garmin API for testing without a key
 devtools/build_geodata.py  rebuilds dashboard/geodata from GeoNames
 ```
+
+<a id="testing"></a>
 
 ### Testing without Garmin
 
@@ -191,9 +326,19 @@ GARMIN_API_BASE=http://127.0.0.1:8765 GARMIN_PERSONAL_API_KEY=test-key \
 The mock also answers Open-Meteo requests: add
 `WEATHER_FORECAST_URL=http://127.0.0.1:8765/v1/forecast WEATHER_ARCHIVE_URL=http://127.0.0.1:8765/v1/archive`.
 
+
+[Back to top](#top)
+
+<a id="license"></a>
+
 ## License
 
 MIT, see [LICENSE](LICENSE). Bundled third-party parts keep their own licenses (listed below).
+
+
+[Back to top](#top)
+
+<a id="credits"></a>
 
 ## Credits
 
@@ -209,3 +354,5 @@ map data by OpenStreetMap contributors, basemaps by CARTO.
 Font: [Archivo](https://github.com/Omnibus-Type/Archivo) (SIL Open Font License).
 
 Not affiliated with Garmin.
+
+[Back to top](#top)

@@ -17,7 +17,6 @@
   <div class="kpi"><p class="kpi-label">Longest streak</p><p class="kpi-value">{{ data.streak.best }}<small> days</small></p><p class="kpi-meta">ended {{ data.streak.best_end|nicedate }}</p></div>
 </div>
 
-{% include "dashboard/partials/narrative.html" with title="Your story so far" seed="personal" sentences=3 more=True text=narrative %}
 
 {% if data.pbs %}
 <section class="panel">
