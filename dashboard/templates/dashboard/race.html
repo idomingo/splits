@@ -1,0 +1,75 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}{{ r.name }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Back"><a href="{% url 'races' %}">Races</a></nav>
+<header class="page-head">
+  <h1 class="display display-md">{{ r.name }}</h1>
+  <p class="page-sub">{{ r.date|date:"l j F Y" }}{% if r.location %}, {{ r.location }}{% endif %}, {{ r.distance_km|kmv:2 }} km.
+    {% if d.past %}{% elif d.days == 0 %}<strong>Today.</strong>{% elif d.days == 1 %}<strong>Tomorrow.</strong>{% else %}<strong>In {{ d.days }} days</strong> ({{ d.days|div:7|num:1 }} weeks).{% endif %}</p>
+  {% if r.notes %}<p class="race-notes">{{ r.notes|linebreaksbr }}</p>{% endif %}
+</header>
+
+{% if d.result %}{% with x=d.result %}
+<section class="panel race-result">
+  <div class="panel-head"><h2>Result</h2><a class="link" href="{% url 'activity' x.id %}">Open the run</a></div>
+  <dl class="pred-grid">
+    <div><dt>Your time</dt><dd>{{ x.secs|dur }}</dd><span>{{ x.pace|pace }} /km, VDOT {{ x.vdot|num:1 }}</span></div>
+    {% if x.vs_goal is not None %}<div><dt>Against your goal</dt><dd>{% if x.vs_goal <= 0 %}-{{ x.vs_goal|neg|dur }}{% else %}+{{ x.vs_goal|dur }}{% endif %}</dd><span>goal {{ d.goal|dur }}</span></div>{% endif %}
+    {% if x.vs_vdot is not None %}<div><dt>Against VDOT</dt><dd>{% if x.vs_vdot <= 0 %}-{{ x.vs_vdot|neg|dur }}{% else %}+{{ x.vs_vdot|dur }}{% endif %}</dd><span>predicted {{ d.pred.vdot_time|dur }}</span></div>
+    <div><dt>Against Riegel</dt><dd>{% if x.vs_riegel <= 0 %}-{{ x.vs_riegel|neg|dur }}{% else %}+{{ x.vs_riegel|dur }}{% endif %}</dd><span>predicted {{ d.pred.riegel_time|dur }}</span></div>{% endif %}
+  </dl>
+</section>
+{% endwith %}{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><h2>{% if d.past %}What the app predicted{% else %}Predicted time{% endif %}</h2>{% if d.pred %}<span class="panel-note">from your {{ d.pred.source.what }} on {{ d.pred.source.date|date:"j M" }}: <a href="{% url 'activity' d.pred.source.id %}">{{ d.pred.source.secs|dur }}</a>, VDOT {{ d.pred.vdot|num:1 }}</span>{% endif %}</div>
+  {% if d.pred %}
+  <dl class="pred-grid">
+    <div><dt>VDOT (Daniels)</dt><dd>{{ d.pred.vdot_time|dur }}</dd><span>{{ d.pred.vdot_pace|pace }} /km</span></div>
+    <div><dt>Riegel</dt><dd>{{ d.pred.riegel_time|dur }}</dd><span>{{ d.pred.riegel_pace|pace }} /km</span></div>
+    {% if d.goal %}<div><dt>Your goal</dt><dd>{{ d.goal|dur }}</dd><span>{{ d.goal_pace|pace }} /km, needs a VDOT of {{ d.goal_vdot|num:1 }}</span></div>{% endif %}
+  </dl>
+  <p class="panel-note">Both start from your best result over 3 km or more in the last 90 days: races and time trials first, then the fastest stretch inside any run. VDOT uses Jack Daniels' tables of what the same fitness runs at each distance; Riegel's formula scales the time by distance to the power 1.06. Both assume you have trained for the distance: for a half or a full marathon off short races alone, they tend to be optimistic.{% if d.goal and d.goal_vdot > d.pred.vdot %} Your goal needs {{ d.goal_vdot|sub:d.pred.vdot|num:1 }} more VDOT than your current {{ d.pred.vdot|num:1 }}.{% endif %}</p>
+  {% else %}
+  <p class="panel-note">No race or best effort of 3 km or more in the 90 days before, so there is nothing to predict from yet.</p>
+  {% endif %}
+</section>
+
+<div class="grid grid-2">
+  {% if d.split_rows %}
+  <section class="panel">
+    <div class="panel-head"><h2>Splits</h2><span class="panel-note">even pace, time at each km</span></div>
+    <div class="table-scroll table-scroll-full">
+    <table class="table">
+      <thead><tr><th scope="col">Km</th>{% for n in d.split_names %}<th scope="col" class="num">{{ n }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in d.split_rows %}<tr><th scope="row">{% if row.partial %}{{ row.mark|num:2 }} (finish){% else %}{{ row.mark|num }}{% endif %}</th>{% for c in row.cells %}<td class="num">{{ c.at|dur }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">Pace</th>{% for c in d.split_rows.0.cells %}<td class="num">{{ c.pace|pace }} /km</td>{% endfor %}</tr></tfoot>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+  <section class="panel">
+    {% if d.paces %}
+    <div class="panel-head"><h2>Paces to train at</h2><span class="panel-note">from VDOT {{ d.pred.vdot|num:1 }}, approximate</span></div>
+    <table class="table">
+      <tbody>
+      {% for p in d.paces %}<tr><th scope="row">{{ p.name }}<span class="sub">{{ p.note }}</span></th><td class="num">{% if p.fast|floatformat:0 != p.slow|floatformat:0 %}{{ p.fast|pace }} to {{ p.slow|pace }}{% else %}{{ p.fast|pace }}{% endif %} /km</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <div class="panel-head ready-head"><h2>Build-up</h2><span class="panel-note">the 6 weeks before {% if d.past %}the race{% else %}today{% endif %}</span></div>
+    <dl class="pred-grid pred-grid-sm">
+      <div><dt>Longest run</dt><dd>{{ d.ready.longest_km|kmv:1 }} km</dd><span>{{ d.ready.longest_share }}% of the race distance</span></div>
+      <div><dt>Running a week</dt><dd>{{ d.ready.weekly_km|kmv:1 }} km</dd><span>average of the last 4 weeks</span></div>
+      <div><dt>Runs</dt><dd>{{ d.ready.runs_6w }}</dd><span>in 6 weeks</span></div>
+    </dl>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Edit</h2></div>
+  {% include "dashboard/partials/race_form.html" %}
+</section>
+{% endblock %}

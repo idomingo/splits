@@ -5,7 +5,7 @@
     <dl class="week-stats">
       {% if w.km %}<div><dt>Distance</dt><dd>{{ w.km|kmv:1 }} km</dd></div>{% endif %}
       <div><dt>Time</dt><dd>{{ w.secs|hm }}</dd></div>
-      <div><dt>Activities</dt><dd>{{ w.count }}</dd></div>
+      <div><dt>Sessions</dt><dd>{{ w.count }}</dd></div>
     </dl>
     <div class="week-ribbon">{% zone_ribbon w.zones "sm" %}</div>
   </header>
@@ -18,7 +18,7 @@
         </div>
         <div class="card-body">
           <div class="card-top">
-            <h4>{% if a.name %}{{ a.name }}{% else %}{{ a.type_key|typelabel }}{% endif %}</h4>
+            <h4>{{ a.title }}</h4>
             {% if a.kind_label %}<span class="chip chip-kind grp-{{ a.kind|kindgroup }}">{{ a.kind_label }}</span>{% elif a.event_type == "race" %}<span class="chip chip-race">Race</span>{% endif %}
             {% if a.te_label|telabel %}<span class="chip">{{ a.te_label|telabel }}</span>{% endif %}
             <time datetime="{{ a.start_local|date:'c' }}">{{ a.start_local|nicedate }}, {{ a.start_local|date:"H:i" }}</time>
@@ -33,6 +33,7 @@
             {% if a.training_load %}<div class="hide-sm"><dt>Load</dt><dd>{{ a.training_load|num }}</dd></div>{% endif %}
           </dl>
           {% zone_ribbon a.zone_seconds "sm" %}
+          {% if a.extras %}<p class="card-extras">With {% for e in a.extras %}{{ e.role|lower }} {{ e.km|kmv:1 }} km{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% elif a.session_of_id %}<p class="card-extras">Part of the session of {{ a.session_of.title }}</p>{% endif %}
           {% with w=a.wx %}{% if w %}<p class="card-wx"><span>{{ w.temp_c|num }}°C</span>{% if w.weather_code is not None %}<span>{{ w.weather_code|wmo }}</span>{% endif %}<span>wind {{ w.wind_kmh|num }} km/h {{ w.wind_dir|compass }}</span>{% if w.precip_mm and w.precip_mm >= 0.1 %}<span>{{ w.precip_mm|num:1 }} mm rain</span>{% endif %}</p>{% endif %}{% endwith %}
         </div>
       </a>

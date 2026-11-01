@@ -40,29 +40,6 @@
 <div class="grid grid-2">
   <section class="panel span-2">
     <div class="panel-head">
-      <h2>Year by year</h2>
-      <div class="seg" role="group" aria-label="Measure">
-        <button type="button" class="seg-btn is-on" data-yearly="hours">Time</button>
-        <button type="button" class="seg-btn" data-yearly="km">Distance</button>
-      </div>
-    </div>
-    <div class="chart" id="chart-yearly" style="height:260px"></div>
-    <div class="table-scroll">
-    <table class="table">
-      <thead><tr><th scope="col">Year</th>{% for c in data.sports %}<th scope="col" class="num"><span class="key sport-{{ c }}"></span>{{ c|catlabel }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead>
-      <tbody>
-      {% for y in data.year_rows %}
-        <tr><th scope="row">{{ y.year }}</th>
-          {% for cell in y.cells %}<td class="num">{% if cell.count %}{% if cell.km >= 1 %}{{ cell.km|kmv:0 }} km{% else %}{{ cell.hours|hours:0 }} h{% endif %}<span class="sub">{{ cell.count }}</span>{% else %}-{% endif %}</td>{% endfor %}
-          <td class="num">{{ y.hours|hours:0 }} h<span class="sub">{{ y.count }}</span></td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  </section>
-
-  <section class="panel span-2">
-    <div class="panel-head">
       <h2>Month by month</h2>
       <div class="seg" role="group" aria-label="Measure">
         <button type="button" class="seg-btn is-on" data-pmonthly="hours">Time</button>
@@ -96,11 +73,6 @@
     </dl>
   </section>
   {% endfor %}
-
-  <section class="panel">
-    <div class="panel-head"><h2>Your year, month by month</h2><span class="panel-note">Hours per calendar month, all years together</span></div>
-    <div class="chart" id="chart-months" style="height:240px"></div>
-  </section>
 
   <section class="panel">
     <div class="panel-head"><h2>Heart rate zones</h2>{% if data.zones %}<span class="panel-note">From your Garmin settings{% if data.zones.max %}, max {{ data.zones.max|num }} bpm{% endif %}</span>{% elif data.floors %}<span class="panel-note">Estimated from your highest heart rate</span>{% endif %}</div>

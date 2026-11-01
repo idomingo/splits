@@ -1,0 +1,40 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Races{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Races</h1>
+  <p class="page-sub">Races you have entered. For each one the app predicts a time from your recent races and best efforts, two ways (Jack Daniels' VDOT and Pete Riegel's formula), with the pace, the splits and the paces to train at.</p>
+</header>
+{% if upcoming %}
+<ul class="race-list">
+  {% for r in upcoming %}
+  <li><a class="race-card" href="{% url 'race' r.pk %}">
+    <span class="race-when"><strong>{% if r.days == 0 %}Today{% elif r.days == 1 %}Tomorrow{% else %}{{ r.days }}{% endif %}</strong>{% if r.days > 1 %}days{% endif %}</span>
+    <span class="race-body">
+      <span class="race-name">{{ r.name }}</span>
+      <span class="race-meta">{{ r.date|date:"D j M Y" }}{% if r.location %}, {{ r.location }}{% endif %}, {{ r.distance_km|kmv:2 }} km</span>
+      <span class="race-stats">
+        {% if r.goal_s %}<span><em>Goal</em>{{ r.goal_s|dur }}</span>{% endif %}
+        {% if r.pred %}<span><em>VDOT</em>{{ r.pred.vdot_time|dur }}</span><span><em>Riegel</em>{{ r.pred.riegel_time|dur }}</span>{% endif %}
+      </span>
+    </span>
+  </a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<section class="empty"><p>No race coming up. Add the next one below.</p></section>
+{% endif %}
+<section class="panel">
+  <div class="panel-head"><h2>Add a race</h2></div>
+  {% include "dashboard/partials/race_form.html" %}
+</section>
+{% if past %}
+<section class="panel">
+  <div class="panel-head"><h2>Past races</h2></div>
+  <table class="table">
+    <thead><tr><th scope="col">Date</th><th scope="col">Race</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Goal</th></tr></thead>
+    <tbody>{% for r in past %}<tr><th scope="row">{{ r.date|date:"j M Y" }}</th><td><a href="{% url 'race' r.pk %}">{{ r.name }}</a></td><td class="num">{{ r.distance_km|kmv:2 }} km</td><td class="num">{% if r.goal_s %}{{ r.goal_s|dur }}{% else %}-{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

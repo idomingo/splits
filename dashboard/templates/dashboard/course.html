@@ -1,0 +1,47 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}{{ course.name }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Back"><a href="{% url 'courses' %}">Courses</a></nav>
+<header class="page-head">
+  <div class="head-row">
+    <div>
+      <h1 class="display display-md">{{ course.name }}</h1>
+      <p class="page-sub">{% if data.rows|length == 1 %}Run once, on {{ data.first|date:"j M Y" }}, in {{ data.best.secs|dur }}.{% else %}Run {{ data.rows|length }} times, from {{ data.first|date:"j M Y" }} to {{ data.last|date:"j M Y" }}{% if data.best %}. Best {{ data.best.secs|dur }} on {{ data.best.date|date:"j M Y" }}{% endif %}.{% endif %}</p>
+    </div>
+    {% if data.route %}<span class="course-thumb course-thumb-lg" aria-hidden="true"><svg viewBox="0 0 100 100"><path d="{{ data.route }}"/></svg></span>{% endif %}
+  </div>
+</header>
+<div class="grid grid-2">
+  {% if data.rows|length > 1 %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Every time on this course</h2></div>
+    <p class="panel-note">Time for each race or time trial (up is faster). Hover for heart rate and conditions; click to open the run.</p>
+    <div class="chart" id="chart-course" style="height:280px"></div>
+  </section>
+  {% endif %}
+  <section class="panel span-2">
+    <div class="table-scroll table-scroll-full">
+    <table class="table">
+      <thead><tr><th scope="col">Date</th><th scope="col">Kind</th><th scope="col" class="num">Time</th><th scope="col" class="num">Behind best</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th><th scope="col" class="num">m per beat</th><th scope="col" class="num">Temp</th><th scope="col" class="num">Wind</th></tr></thead>
+      <tbody>
+      {% for r in data.rows reversed %}
+        <tr{% if r.best %} class="is-best"{% endif %}>
+          <th scope="row"><a href="{% url 'activity' r.id %}">{{ r.date|date:"D j M Y" }}</a></th>
+          <td>{% if r.kind %}<span class="chip chip-kind grp-{{ r.kind_key|kindgroup }}">{{ r.kind }}</span>{% endif %}</td>
+          <td class="num">{{ r.secs|dur }}{% if r.best %} <span class="chip chip-best">Best</span>{% endif %}</td>
+          <td class="num">{% if r.behind %}+{{ r.behind|dur }}{% elif r.best %}-{% endif %}</td>
+          <td class="num">{{ r.pace|pace }}</td>
+          <td class="num">{{ r.hr|num }}</td>
+          <td class="num">{{ r.ef|num:2 }}</td>
+          <td class="num">{% if r.temp is not None %}{{ r.temp|num }}°C{% else %}-{% endif %}</td>
+          <td class="num">{% if r.wind is not None %}{{ r.wind|num }} km/h{% else %}-{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="panel-note">Time is clock time (elapsed). Metres per beat is distance per heartbeat over moving time: higher means the same course for less effort.</p>
+  </section>
+</div>
+{% endblock %}
+{% block data %}{{ json|json_script:"page-data" }}{% endblock %}

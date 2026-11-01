@@ -294,3 +294,30 @@ def neg(v):
 @register.filter
 def mul100(v):
     return v * 100 if v is not None else None
+
+
+@register.filter
+def ordinal_rank(n):
+    """2 -> 2nd"""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return n
+    return f"{n}{ordinal_suffix(n)}"
+
+
+@register.filter
+def speed_pace(mps):
+    """m/s -> min:ss per km"""
+    try:
+        return pace(1000.0 / float(mps)) if mps else "-"
+    except (TypeError, ValueError, ZeroDivisionError):
+        return "-"
+
+
+@register.filter
+def sub(v, other):
+    try:
+        return float(v) - float(other)
+    except (TypeError, ValueError):
+        return None

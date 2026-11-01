@@ -51,5 +51,47 @@ def categorize(type_key: str) -> str:
     return "other"
 
 
+import re
+
+# Garmin's automatic names end with the sport ("County Kildare Running", "Cardio", "Indoor Cycling")
+GENERIC_NAME = re.compile(
+    r"(^|\s)(running|walking|cycling|biking|riding|hiking|swimming|swim|strength|strength training|cardio|yoga|"
+    r"pilates|hiit|rowing|elliptical|stair stepper|breathwork|training|workout|run|walk|ride|multisport|"
+    r"activity|mountaineering)$", re.I)
+KIND_TITLE = {
+    "race": "Race or time trial", "threshold": "Threshold run", "intervals": "Interval session",
+    "progression": "Progression run", "long": "Long run", "steady": "Steady run", "easy": "Easy run",
+    "recovery": "Recovery run", "strides": "Strides", "warmup": "Warm-up or cool-down",
+}
+SPORT_TITLE = {"run": "Run", "walk": "Walk", "cycle": "Ride", "swim": "Swim"}
+
+
+def is_generic_name(name: str) -> bool:
+    return not name or bool(GENERIC_NAME.search(name.strip()))
+
+
+def activity_title(category, kind, type_key, name, place, distance_m, what=None):
+    """What the activity is, where and how far: "Long run in Kildare 17.6 km". A name typed in Garmin Connect
+    ("Dublin Marathon") is kept as it is."""
+    if name and not is_generic_name(name):
+        return name
+    if what:
+        pass
+    elif category == "run":
+        what = KIND_TITLE.get(kind or "", "Run")
+        if type_key and "treadmill" in type_key and not place:
+            what += " on a treadmill"
+    else:
+        what = SPORT_TITLE.get(category) or pretty_type(type_key)
+        if category == "cycle" and type_key and ("indoor" in type_key or "virtual" in type_key):
+            what = "Indoor ride"
+    parts = [what]
+    if place:
+        parts.append(f"in {place}")
+    if distance_m and distance_m >= 100:
+        parts.append(f"{distance_m / 1000:.1f} km")
+    return " ".join(parts)
+
+
 def pretty_type(type_key: str) -> str:
     return (type_key or "activity").replace("_", " ").capitalize()

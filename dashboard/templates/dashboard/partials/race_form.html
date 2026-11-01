@@ -1,0 +1,18 @@
+{% load fmt %}<form method="post" class="race-form">{% csrf_token %}
+  <div class="rf-grid">
+    <label>Name<input name="name" required maxlength="200" value="{{ f.name }}" placeholder="City Half Marathon"></label>
+    <label>Location<input name="location" maxlength="200" value="{{ f.location }}" placeholder="Dublin"></label>
+    <label class="dp-wrap">Date<input type="text" name="date" required value="{{ f.date }}" data-datepicker placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" autocomplete="off" inputmode="numeric"></label>
+    <label>Distance
+      <select name="distance" data-distance>
+        {% for d, label in distances %}<option value="{{ d }}"{% if f.distance == d|stringformat:"s" %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        <option value="other"{% if f.distance == "other" %} selected{% endif %}>Other</option>
+      </select>
+    </label>
+    <label data-other-km{% if f.distance != "other" %} hidden{% endif %}>Kilometres<input name="distance_km" inputmode="decimal" value="{{ f.distance_km }}"></label>
+    <label>Goal time <small>optional, h:mm:ss</small><input name="goal" value="{{ f.goal }}" placeholder="1:55:00"></label>
+  </div>
+  <label class="rf-notes">Notes<textarea name="notes" rows="2">{{ f.notes }}</textarea></label>
+  {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+  <div class="rf-actions"><button type="submit" class="btn btn-primary">{% if editing %}Save changes{% else %}Add race{% endif %}</button>{% if editing %}<button type="submit" name="delete" value="1" class="btn btn-quiet">Delete race</button>{% endif %}</div>
+</form>

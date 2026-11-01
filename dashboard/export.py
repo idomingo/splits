@@ -15,11 +15,7 @@ from urllib.parse import quote
 
 from django.conf import settings
 
-KIND_NAME = {
-    "race": "Race or time trial", "threshold": "Threshold run", "intervals": "Interval session",
-    "progression": "Progression run", "long": "Long run", "steady": "Steady run", "easy": "Easy run",
-    "recovery": "Recovery run", "strides": "Strides", "warmup": "Warm-up or cool-down",
-}
+from .sports import KIND_TITLE as KIND_NAME  # noqa: E402  (same words as the titles on the dashboard)
 ZONE_NAMES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"]
 # Garmin summary fields that identify the person, the device owner or the location: never exported
 PRIVATE_KEYS = re.compile(r"^(owner|userProfile|profileImage|deviceId|activityUUID|privacy|summarizedDiveInfo)"
@@ -491,15 +487,10 @@ def decoupling(rec, kind, blocks, mask=None, wind=None):
 
 # ---------- the file ----------
 def filename(act):
-    kind = KIND_NAME.get(act.kind, "") if act.category == "run" else ""
-    what = kind or (act.name or "Activity")
-    place = act.place.label if _has(act, "place") else (act.location_name or "")
-    parts = [act.start_local.strftime("%Y-%m-%d %Hh%M"), what]
-    if place:
-        parts.append(f"in {place}")
-    if act.distance_m:
-        parts.append(f"{act.distance_km:.1f} km")
-    name = re.sub(r'[\\/:*?"<>|\n\r\t]+', " ", " ".join(parts))
+    """The same words as the activity's title on the dashboard, with the date and time in front. The file
+    always says what kind of run it was, even when the run has a name of its own in Garmin Connect."""
+    what = act.make_title(use_name=False)
+    name = re.sub(r'[\\/:*?"<>|\n\r\t]+', " ", f"{act.start_local:%Y-%m-%d %Hh%M} {what}")
     return re.sub(r"\s+", " ", name).strip() + ".md"
 
 
@@ -915,13 +906,88 @@ def activity_markdown(act):
     if c:
         add("## Compared with the runner's 90 days before")
         add("")
-        add(f"- Runs in those 90 days: {c['n']}")
+        add(f"- {'Runs of the same kind' if c.get('kind') else 'Runs'} in those 90 days: {c['n']}")
         if c.get("dist_avg"):
             add(f"- Their average distance: {_n(c['dist_avg'], 1)} km; this run was longer than {c['longer_than']} % of them")
         if c.get("pace_avg"):
             add(f"- Their median pace: {_pace(c['pace_avg'])} /km")
         if c.get("hr_avg"):
             add(f"- Their average heart rate: {_n(c['hr_avg'])} bpm")
+        add("")
+
+    # a race or time trial: the earlier ones on the same course, or else in the same place
+    if kind == "race":
+        from .analytics import kind_q
+        from .courses import find_courses
+        course = next((c for c in find_courses() if act.pk in c["runs"]), None)
+        if course:
+            earlier = Activity.objects.filter(pk__in=course["runs"], start_local__lt=start)
+            scope = f"on the same course ({course['name']}, matched from the GPS track)"
+        elif place:
+            earlier = Activity.objects.filter(kind_q("race"), category="run", place=place, start_local__lt=start)
+            scope = f"in {place.label} (any course)"
+        else:
+            earlier = Activity.objects.none()
+        earlier = list(earlier.select_related("weather").order_by("-start_local")[:10])
+        if earlier:
+            add("## Earlier races and time trials " + scope)
+            add("")
+            add("Most recent first, up to 10. Time is clock time (elapsed).")
+            add("")
+            trows = []
+            for r in earlier:
+                rw = r.wx
+                secs = r.elapsed_s or r.time_s
+                trows.append((f"{r.start_local:%a %Y-%m-%d %H:%M}", _n(r.distance_km, 2), _dur(secs),
+                              _pace(secs / r.distance_km) if r.distance_m else "", _n(r.avg_hr), _n(r.max_hr),
+                              _n(rw.temp_c) if rw else "", _n(rw.wind_kmh) if rw else "",
+                              _n(rw.headwind_kmh, 1) if rw and rw.headwind_kmh is not None else ""))
+            add(_table(["Date", "Km", "Time", "Pace /km", "Avg HR", "Max HR", "Temp °C", "Wind km/h",
+                        "Avg headwind km/h"], trows))
+            add("")
+
+    # the runner's training plan around this day, when one was imported
+    from . import plan as P
+    around = P.by_day(start.date() - timedelta(days=6), start.date() + timedelta(days=7))
+    if around:
+        today_plan = around.get(start.date(), [])
+        add("## Training plan")
+        add("")
+        if today_plan:
+            for ps in today_plan:
+                bits = [ps.title or P.label(ps.kind), f"kind {P.label(ps.kind).lower()}"]
+                if ps.distance_km:
+                    bits.append(f"{_n(ps.distance_km, 1)} km")
+                if ps.duration_min:
+                    bits.append(f"{_n(ps.duration_min)} min")
+                if ps.pace:
+                    bits.append(f"pace {ps.pace} /km")
+                add(f"- Planned for this day: {', '.join(bits)}" + (f". {ps.description}" if ps.description else ""))
+        else:
+            add("- Nothing was planned for this day.")
+        add("")
+        add("The plan for the week before and the week after (from the runner's imported plan):")
+        add("")
+        trows = []
+        for d in sorted(around):
+            for ps in around[d]:
+                trows.append((f"{d:%a %Y-%m-%d}", P.label(ps.kind), ps.title, _n(ps.distance_km, 1) if ps.distance_km else "",
+                              ps.pace, (ps.description or "").replace("|", "/")[:140]))
+        add(_table(["Date", "Kind", "Title", "Km", "Pace", "Details"], trows))
+        add("")
+
+    # the races the runner has entered, from this day on
+    from .models import Race
+    ahead = list(Race.objects.filter(date__gte=start.date(), date__lte=start.date() + timedelta(days=180)).order_by("date")[:3])
+    if ahead:
+        add("## Races ahead (entered by the runner)")
+        add("")
+        for r in ahead:
+            gap = (r.date - start.date()).days
+            when = "the same day as this run" if gap == 0 else f"{gap} day{'s' if gap != 1 else ''} after this run"
+            add(f"- {r.name}: {r.date:%a %Y-%m-%d}, {when}, "
+                f"{_n(r.distance_km, 2)} km{', ' + r.location if r.location else ''}"
+                f"{', goal ' + _dur(r.goal_s) if r.goal_s else ''}")
         add("")
 
     # training context
@@ -1058,3 +1124,75 @@ def activity_markdown(act):
         add("```")
         add("")
     return "\n".join(L)
+
+
+# ---------- the same analysis for the activity page (worked out once, kept with the stream) ----------
+ANALYSIS_VERSION = 1
+
+
+def _nearest_index(src_t, dst_t):
+    """For every time in dst_t, the index of the closest time in src_t (both sorted)."""
+    out, j = [], 0
+    for tt in dst_t:
+        while j + 1 < len(src_t) and abs(src_t[j + 1] - tt) <= abs(src_t[j] - tt):
+            j += 1
+        out.append(j)
+    return out
+
+
+def page_analysis(act):
+    """Running dynamics as chart channels, marked heart rate stretches, the out-and-back halves or circuit
+    laps and aerobic decoupling, for the activity page. Worked out from the activity file the first time the
+    page is opened and stored with the chart data."""
+    from .weather import headwind_series
+    stream = act.stream if _has(act, "stream") else None
+    if not stream or not (stream.data or {}).get("t") or act.category != "run":
+        return None
+    data = stream.data
+    cached = data.get("_analysis")
+    if cached and cached.get("v") == ANALYSIS_VERSION:
+        return cached
+    full = full_recording(act)
+    rec = full[0] if full else stored_recording(act)
+    if not rec or not rec.get("t"):
+        return None
+    w = act.wx
+    wind = None
+    if w and rec.get("lat") and any(v is not None for v in rec["lat"]):
+        hw = headwind_series(act, w, data={"t": rec["t"], "lat": rec["lat"], "lon": rec["lon"]})
+        wind = hw["series"] if hw else None
+    marks = marked_hr_ranges(rec)
+    mask = mask_for(rec["t"], marks) if marks else None
+    out = {"v": ANALYSIS_VERSION, "marks": [[a, b] for a, b in marks]}
+
+    def row(name, i0, i1):
+        st = seg_stats(rec, i0, i1, wind, mask)
+        return {"name": name, "start": rec["t"][i0], "dist": st["dist"], "secs": st["secs"], "pace": st["pace"],
+                "hr": st["hr"], "hr_clean": st["hr_clean"] if st["marked"] else None, "cad": st["cad"],
+                "pwr": st["pwr"], "up": st["up"], "down": st["down"], "wind": st["wind"]}
+    shape = route_shape(rec)
+    if shape and shape["shape"] == "out_and_back":
+        out["shape"] = {"kind": "out_and_back", "rows": [row("Out", 0, shape["turn"]),
+                                                         row("Back", shape["turn"], len(rec["t"]) - 1)]}
+    elif shape:
+        ps, t = shape["passes"], rec["t"]
+        rows = [row(f"Lap {k + 1}", a, b) for k, (a, b) in enumerate(zip(ps, ps[1:]))]
+        if ps[0] > 0 and t[ps[0]] >= 30:
+            rows.insert(0, row("Before the first lap", 0, ps[0]))
+        if len(t) - 1 - ps[-1] > 30:
+            rows.append(row("After the last lap", ps[-1], len(t) - 1))
+        out["shape"] = {"kind": "circuit", "lap_m": shape["lap_m"], "laps": len(ps) - 1, "rows": rows}
+    dec = decoupling(rec, act.kind, (act.run_type_info or {}).get("blocks") or [], mask, wind)
+    if dec:
+        out["decoupling"] = dec
+    # running dynamics, thinned to the chart's own points
+    if full:
+        idx = _nearest_index(rec["t"], data["t"])
+        for key in ("gct", "vo", "vr", "step"):
+            vals = rec.get(key) or []
+            if any(v for v in vals):
+                data[key] = [round(vals[i], 1) if vals[i] else None for i in idx]
+    data["_analysis"] = out
+    stream.data = data
+    stream.save(update_fields=["data"])
+    return out

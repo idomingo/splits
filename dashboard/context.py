@@ -55,6 +55,15 @@ def nav(request):
         area_sports = [{"key": key, "label": label, "slug": CATEGORY_TO_SLUG[key], "count": ac[key]}
                        for key, label, _ in CATEGORIES if ac.get(key)]
 
+    from .courses import find_courses
+    try:
+        n_courses = len(find_courses()) if counts.get("run") else 0
+    except Exception:  # never break the menu over this
+        n_courses = 0
+
+    from .models import Race
+    nxt = Race.objects.filter(date__gte=date.today()).order_by("date").first()
+
     last = SyncRun.objects.exclude(status=SyncRun.RUNNING).first()
     return {
         "APP_NAME": settings.APP_NAME,
@@ -62,6 +71,8 @@ def nav(request):
         "nav_run_kinds": run_kinds,
         "nav_total": sum(counts.values()),
         "nav_places": nav_places,
+        "nav_courses": n_courses,
+        "nav_next_race": (nxt.date - date.today()).days if nxt else None,
         "nav_place_count": len(place_rows),
         "nav_area": area,
         "nav_area_sports": area_sports,

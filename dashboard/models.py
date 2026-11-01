@@ -90,6 +90,9 @@ class Activity(models.Model):
     run_type_manual = models.CharField(max_length=16, blank=True)                 # set by you; wins
     run_type_reason = models.CharField(max_length=255, blank=True)
     run_type_info = models.JSONField(default=dict, blank=True)                    # fast blocks etc.
+    # a warm-up, cool-down or strides run points to the run it belongs to (same morning, minutes apart)
+    session_of = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="session_extras")
     place = models.ForeignKey(Place, null=True, blank=True, on_delete=models.SET_NULL, related_name="activities")
     route = models.JSONField(null=True, blank=True)          # simplified [[[lon, lat], ...], ...] for overview maps
     geo_version = models.SmallIntegerField(default=0)        # places.GEO_VERSION once place and route are set
@@ -107,6 +110,27 @@ class Activity(models.Model):
     def kind(self):
         """Run subcategory: your choice first, then the classifier's."""
         return self.run_type_manual or self.run_type
+
+    @property
+    def title(self):
+        """A readable name: "Long run in Kildare 17.6 km", or the name given in Garmin Connect when it is not
+        Garmin's automatic one ("County Kildare Running")."""
+        return self.make_title(use_name=True)
+
+    def make_title(self, use_name=True):
+        from .sports import activity_title
+        try:
+            place = self.place.label if self.place_id else ""
+        except Exception:
+            place = ""
+        what = None
+        if self.category == "run" and self.kind == "warmup" and self.session_of_id:
+            try:
+                what = "Warm-up" if self.start_local < self.session_of.start_local else "Cool-down"
+            except Exception:
+                what = None
+        return activity_title(self.category, self.kind, self.type_key, self.name if use_name else "",
+                              place or self.location_name, self.distance_m, what=what)
 
     @property
     def kind_label(self):
@@ -376,3 +400,42 @@ class SyncRun(models.Model):
 
     class Meta:
         ordering = ["-started_at"]
+
+
+class Race(models.Model):
+    """A race you have entered (or plan to): the app predicts a time and paces for it."""
+    name = models.CharField(max_length=200)
+    location = models.CharField(max_length=200, blank=True)
+    date = models.DateField()
+    distance_m = models.FloatField()
+    goal_s = models.FloatField(null=True, blank=True)   # target time, optional
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.date} {self.name}"
+
+    @property
+    def distance_km(self):
+        return self.distance_m / 1000.0
+
+
+class PlanSession(models.Model):
+    """One day of a training plan, imported from a CSV file (written by you or an AI tool)."""
+    date = models.DateField(db_index=True)
+    kind = models.CharField(max_length=16)               # easy, long, threshold, intervals, ... rest
+    title = models.CharField(max_length=200, blank=True)
+    distance_km = models.FloatField(null=True, blank=True)
+    duration_min = models.FloatField(null=True, blank=True)
+    pace = models.CharField(max_length=60, blank=True)    # as written, e.g. "5:10-5:20"
+    description = models.TextField(blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+
+    def __str__(self):
+        return f"{self.date} {self.kind} {self.title}"

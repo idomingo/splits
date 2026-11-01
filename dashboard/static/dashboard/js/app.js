@@ -400,21 +400,37 @@
 
     chart("chart-load", (t) => {
       const L = data.load;
-      return Object.assign(base(t), {
-        legend: legend(t, ["Last 7 days", "Last 6 weeks"]),
-        grid: { left: 6, right: 40, top: 30, bottom: 6, containLabel: true },
-        xAxis: axisCat(t, L.dates, shortDate),
-        yAxis: axisVal(t),
+      const bands = [[0, 0.8, t.zone[0]], [0.8, 1.3, t.zone[2]], [1.3, 1.5, t.zone[3]], [1.5, 3, t.zone[4]]];
+      const rmax = Math.max(1.8, ...L.ratio.filter((v) => v != null).map((v) => Math.ceil(v * 10) / 10 + 0.1));
+      return {
+        animationDuration: 350,
+        textStyle: { fontFamily: t.font, color: t.ink2, fontSize: 12 },
+        legend: legend(t, ["Last 7 days", "Usual week"]),
+        axisPointer: { link: [{ xAxisIndex: "all" }] },
+        grid: [{ left: 44, right: 14, top: 30, height: "46%" }, { left: 44, right: 14, top: "66%", bottom: 24 }],
+        xAxis: [Object.assign(axisCat(t, L.dates, shortDate), { gridIndex: 0, axisLabel: { show: false } }),
+                Object.assign(axisCat(t, L.dates, shortDate), { gridIndex: 1 })],
+        yAxis: [Object.assign(axisVal(t, (v) => compact(v)), { gridIndex: 0, splitNumber: 3 }),
+                Object.assign(axisVal(t, (v) => v.toFixed(1)), { gridIndex: 1, min: 0, max: rmax, interval: 0.5 })],
         tooltip: Object.assign(tooltipBase(t), {
-          formatter: (ps) => ttHtml(dayLabel(ps[0].axisValue), ps.map((p) => ({ color: p.color, name: p.seriesName, value: num(p.value) }))),
+          formatter: (ps) => {
+            const i = ps[0].dataIndex;
+            return ttHtml(dayLabel(L.dates[i]), [
+              { color: t.ink, name: "Load, last 7 days", value: num(L.acute[i]) },
+              { color: t.muted, name: "Usual week (last 28 days)", value: num(L.usual[i]) },
+              { name: "Ratio", value: L.ratio[i] == null ? "-" : L.ratio[i].toFixed(2) },
+            ]);
+          },
         }),
         series: [
-          { name: "Last 6 weeks", type: "line", data: L.chronic, showSymbol: false, smooth: 0.2, lineStyle: { width: 2, color: t.muted }, itemStyle: { color: t.muted },
-            areaStyle: { color: t.muted, opacity: 0.1 }, endLabel: { show: true, color: t.ink2, formatter: (p) => num(p.value), fontSize: 12 } },
-          { name: "Last 7 days", type: "line", data: L.acute, showSymbol: false, smooth: 0.2, lineStyle: { width: 2, color: t.ink }, itemStyle: { color: t.ink },
-            endLabel: { show: true, color: t.ink, fontWeight: 650, formatter: (p) => num(p.value), fontSize: 12 } },
+          { name: "Usual week", type: "line", data: L.usual, showSymbol: false, smooth: 0.2, lineStyle: { width: 2, color: t.muted }, itemStyle: { color: t.muted },
+            areaStyle: { color: t.muted, opacity: 0.1 } },
+          { name: "Last 7 days", type: "line", data: L.acute, showSymbol: false, smooth: 0.2, lineStyle: { width: 2, color: t.ink }, itemStyle: { color: t.ink } },
+          { name: "Ratio", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: L.ratio, showSymbol: false, smooth: 0.2, connectNulls: false,
+            lineStyle: { width: 2, color: t.ink }, itemStyle: { color: t.ink },
+            markArea: { silent: true, data: bands.map(([a, b, c]) => [{ yAxis: a, itemStyle: { color: c, opacity: t.dark ? 0.18 : 0.13 } }, { yAxis: Math.min(b, rmax) }]) } },
         ],
-      });
+      };
     });
 
     chart("chart-calendar", (t, entry) => {
@@ -422,7 +438,13 @@
       const end = data.calendar.end;
       const startDate = parseDate(end);
       startDate.setDate(startDate.getDate() - (narrow ? 181 : 364));
+      // never before the first activity: a new user sees their weeks, not a year of empty squares
+      const first = parseDate(data.calendar.start);
+      if (first > startDate) startDate.setTime(first.getTime());
       const start = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`;
+      const weeks = Math.ceil((parseDate(end) - startDate) / (7 * 86400000)) + 1;
+      // keep square-ish cells when there are only a few weeks
+      const cell = Math.min(26, (entry.el.clientWidth - 40) / Math.max(weeks, 1));
       const pieces = [
         { min: 1, max: 30, color: t.ramp[0], label: narrow ? "<30" : "< 30 min" },
         { min: 30, max: 60, color: t.ramp[1], label: narrow ? "30-60" : "30-60 min" },
@@ -436,7 +458,7 @@
         visualMap: { type: "piecewise", pieces, orient: "horizontal", right: narrow ? undefined : 0, left: narrow ? 0 : undefined, bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: narrow ? 6 : 10,
                      textStyle: { color: t.muted, fontSize: 11.5 }, showLabel: true, outOfRange: { color: t.surface2 } },
         calendar: {
-          range: [start, end], top: 24, left: 34, right: 6, bottom: 36, cellSize: ["auto", "auto"],
+          range: [start, end], top: 24, left: 34, bottom: 36, cellSize: [cell, "auto"],
           splitLine: { show: false }, itemStyle: { color: t.surface2, borderColor: t.surface, borderWidth: 3 },
           yearLabel: { show: false }, dayLabel: { firstDay: 1, nameMap: ["S", "M", "T", "W", "T", "F", "S"], color: t.muted, fontSize: 11 },
           monthLabel: { color: t.muted, fontSize: 11.5, nameMap: MONTHS },
@@ -514,7 +536,43 @@
     const order = ["easy", "workout", "long", "race", "all"];
     ptGroups.sort((a, b) => order.indexOf(a) - order.indexOf(b));
     const groupName = (g) => (g === "all" ? (data.kind ? M.labels.all || "Session" : "Session") : (M.labels[g] || g));
-    chart("chart-pace", (t) => {
+    if (data.zone_pace) {
+      // runs: pace while heart rate sat in the same band, so easy days, tempo work and races each compare with
+      // their own kind of effort (the bands come from the runner's own zones)
+      const Z = data.zone_pace;
+      const zc = (t, k) => ({ z2: t.zone[1], z34: t.zone[3], z45: t.zone[4] })[k];
+      chart("chart-pace", (t) => {
+        const series = [];
+        Z.forEach((b) => {
+          series.push({ name: b.label, type: "scatter", symbolSize: 7, z: 2,
+            itemStyle: { color: zc(t, b.key), opacity: 0.55, borderColor: t.surface, borderWidth: 1 },
+            data: b.points.map((p) => ({ value: [p.date, p.pace], id: p.id, name: p.name, min: p.min, hr: p.hr, kind: p.kind, band: b.label, range: b.range })) });
+          if (b.line.length) series.push({ name: b.label, type: "line", showSymbol: false, smooth: 0.3, z: 4, line: true,
+            lineStyle: { width: 2.5, color: zc(t, b.key) }, itemStyle: { color: zc(t, b.key) }, data: b.line, tooltip: { show: false } });
+        });
+        const all = Z.flatMap((b) => b.points.map((p) => p.date));
+        return Object.assign(base(t), {
+          grid: { left: 6, right: 14, top: 30, bottom: 6, containLabel: true },
+          legend: legend(t, Z.map((b) => b.label)),
+          xAxis: axisTime(t, timeSpan(all)),
+          yAxis: axisVal(t, pace, { inverse: true, scale: true }),
+          tooltip: Object.assign(tooltipBase(t), {
+            trigger: "item",
+            formatter: (p) => {
+              const d = p.data;
+              if (!d || !d.name) return "";
+              return ttHtml(d.name, [
+                { name: dayLabel(d.value[0]), value: "" },
+                { color: p.color, name: "Pace in " + d.band.toLowerCase(), value: pace(d.value[1]) + " /km" },
+                { name: "Time in that band", value: d.min + " min" },
+                { name: "Average heart rate there", value: d.hr + " bpm" },
+              ].concat(d.kind ? [{ name: "Kind", value: d.kind }] : []));
+            },
+          }),
+          series,
+        });
+      }, { after: (c) => c.on("click", go) });
+    } else chart("chart-pace", (t) => {
       const series = ptGroups.map((g) => {
         const race = g === "race";
         return {
@@ -561,13 +619,22 @@
       ],
     }));
 
-    // best efforts: a small chart per distance (different scales, so no shared axis), month or quarter
+    if (data.race_vdot && data.race_vdot.length > 1) {
+      chart("chart-vdot", (t) => Object.assign(base(t), {
+        grid: { left: 6, right: 14, top: 16, bottom: 6, containLabel: true },
+        xAxis: axisTime(t, timeSpan(data.race_vdot.map((r) => r[0]))),
+        yAxis: axisVal(t, (v) => num(v, 0), { scale: true }),
+        tooltip: Object.assign(tooltipBase(t), { trigger: "item", formatter: (p) => ttHtml(p.data.r[3], [
+          { name: dayLabel(p.data.r[0]), value: "" }, { color: p.color, name: "VDOT", value: num(p.data.r[1], 1) }, { name: "Time", value: dur(p.data.r[4]) }]) }),
+        series: [{ type: "line", data: data.race_vdot.map((r) => ({ value: [r[0], r[1]], id: r[2], r })), symbol: "circle", symbolSize: 9,
+                   lineStyle: { width: 2, color: t.group.race }, itemStyle: { color: t.group.race, borderColor: t.surface, borderWidth: 1.5 } }],
+      }), { after: (c) => c.on("click", go) });
+    }
+
+    // best efforts: a small chart per distance (different scales, so no shared axis), best of each month
     const multiples = document.getElementById("chart-progress");
     if (multiples) {
-      let period = "month";
-      const quarterOf = (s) => { const d = parseDate(s); return `Q${Math.floor(d.getMonth() / 3) + 1}`; };
-      const tick = (s) => { const d = parseDate(s); const yy = "\u2019" + String(d.getFullYear()).slice(2); return period === "month" ? `${MONTHS[d.getMonth()]} ${yy}` : `${quarterOf(s)} ${yy}`; };
-      const long = (s) => { const d = parseDate(s); return period === "month" ? monthLabel(s) : `${quarterOf(s)} ${d.getFullYear()}`; };
+      const tick = (s) => { const d = parseDate(s); return `${MONTHS[d.getMonth()]} \u2019${String(d.getFullYear()).slice(2)}`; };
       const minis = [];
       Object.values(data.progress).sort((a, b) => a.dist - b.dist).forEach((P) => {
         const wrap = document.createElement("div");
@@ -576,7 +643,7 @@
         wrap.innerHTML = `<p class="mini-title">${esc(P.label)} <span>best ${esc(dur(best))}</span></p><div class="chart mini" style="height:140px"></div>`;
         multiples.appendChild(wrap);
         minis.push(chart($(".mini", wrap), (t) => {
-          const rows = P[period];
+          const rows = P.month;
           const c = mainColor(t);
           return Object.assign(base(t), {
             grid: { left: 4, right: 12, top: 8, bottom: 4, containLabel: true },
@@ -587,7 +654,7 @@
               axisLabel: { color: t.muted, formatter: dur, showMinLabel: false, showMaxLabel: false } }),
             tooltip: Object.assign(tooltipBase(t), { formatter: (ps) => {
               const i = ps[0].dataIndex;
-              return ttHtml(long(rows[i].p), [{ color: c, name: period === "month" ? "Fastest that month" : "Fastest that quarter", value: dur(rows[i].secs) }]);
+              return ttHtml(monthLabel(rows[i].p), [{ color: c, name: "Fastest that month", value: dur(rows[i].secs) }]);
             } }),
             series: [
               { name: "Fastest", type: "line", data: rows.map((r) => ({ value: r.secs, id: r.id })), symbol: "circle", symbolSize: 7, z: 3,
@@ -596,7 +663,6 @@
           });
         }, { after: (c) => c.on("click", go) }));
       });
-      seg("period", (v) => { period = v; minis.forEach((m) => m && m.render()); });
     }
 
     // weather
@@ -740,6 +806,13 @@
     if (s.alt) channels.push({ key: "alt", title: "Elevation", unit: "m", color: () => tokens().elev, vals: s.alt, fmt: (v) => num(v), area: true });
     if (s.cad) channels.push({ key: "cad", title: "Cadence", unit: cat === "cycle" ? "rpm" : "spm", color: () => tokens().cad, vals: smooth(s.cad, 2), fmt: (v) => num(v), dots: true });
     if (s.pwr) channels.push({ key: "pwr", title: "Power", unit: "W", color: () => tokens().pwr, vals: smooth(s.pwr, 3), fmt: (v) => num(v) });
+    // running dynamics from the activity file (watches that record them)
+    const has = (k) => s[k] && s[k].some((v) => v != null && v > 0);
+    const nz = (arr, f) => arr.map((v) => (v ? f(v) : null));
+    if (has("gct")) channels.push({ key: "gct", title: "Ground contact", unit: "ms", color: () => tokens().cad, vals: smooth(nz(s.gct, (v) => v), 3), fmt: (v) => num(v) });
+    if (has("vo")) channels.push({ key: "vo", title: "Vertical oscillation", unit: "cm", color: () => tokens().pwr, vals: smooth(nz(s.vo, (v) => v / 10), 3), fmt: (v) => num(v, 1) });
+    if (has("vr")) channels.push({ key: "vr", title: "Vertical ratio", unit: "%", color: () => tokens().elev, vals: smooth(nz(s.vr, (v) => v), 3), fmt: (v) => num(v, 1) });
+    if (has("step")) channels.push({ key: "step", title: "Stride length", unit: "m", color: () => tokens().hr, vals: smooth(nz(s.step, (v) => v / 1000), 3), fmt: (v) => num(v, 2) });
     if (data.wind && data.wind.some((v) => v != null)) {
       channels.push({ key: "wind", title: "Headwind", note: "minus means tailwind", unit: "km/h", color: () => tokens().wind, vals: data.wind,
                       fmt: (v) => (v == null ? "-" : (v > 0 ? "+" : "") + num(v, 0)), area: true, zero: true });
@@ -808,7 +881,12 @@
                    min: ch.key === "pace" ? Math.max(0, Math.floor((lo - 15) / 30) * 30) : ch.zero ? Math.min(-5, Math.floor(lo - 1)) : Math.floor(lo - (hi - lo) * 0.08),
                    max: ch.key === "pace" ? Math.ceil((hi + 15) / 30) * 30 : ch.zero ? Math.max(5, Math.ceil(hi + 1)) : Math.ceil(hi + (hi - lo) * 0.08), splitNumber: 3,
                    splitLine: { lineStyle: { color: t.grid } }, axisLabel: { color: t.muted, formatter: ch.fmt } },
-          series: [series],
+          series: [series].concat(ch.key === "hr" && (data.marks || []).length ? [{
+            // stretches where heart rate did not follow pace, shaded so they are easy to spot
+            type: "line", data: [], silent: true,
+            markArea: { silent: true, itemStyle: { color: t.muted, opacity: t.dark ? 0.25 : 0.18 },
+                        data: data.marks.map(([a, b]) => { const at = (sec) => { if (axis === "t") return sec; let i = 0; while (i < n - 1 && s.t[i] < sec) i++; return s.d ? s.d[i] / 1000 : sec; }; return [{ xAxis: at(a) }, { xAxis: at(b) }]; }) },
+          }] : []),
         };
       }, { group: "stream" });
       entries.push(e);
@@ -1065,33 +1143,7 @@
   }
 
   PAGES.personal = function (data) {
-    let metric = "hours";
-    const yearly = chart("chart-yearly", (t) => {
-      const series = metric === "km" ? data.yearly.km : data.yearly.hours;
-      const keys = data.sports.filter((k) => series[k]);
-      return Object.assign(base(t), {
-        legend: legend(t, keys.map((k) => SPORT_LABEL[k])),
-        xAxis: axisCat(t, data.years),
-        yAxis: axisVal(t, (v) => (metric === "km" ? compact(v) + " km" : v + " h")),
-        tooltip: Object.assign(tooltipBase(t), {
-          axisPointer: { type: "shadow", shadowStyle: { color: t.dark ? "rgba(255,255,255,.04)" : "rgba(0,0,0,.035)" } },
-          formatter: (ps) => ttHtml(ps[0].axisValue, ps.filter((p) => p.value > 0).reverse().map((p) => ({ color: p.color, name: p.seriesName, value: metric === "km" ? num(p.value) + " km" : num(p.value) + " h" }))),
-        }),
-        series: stackedBars(t, keys, series, t.sport, SPORT_LABEL),
-      });
-    });
-    seg("yearly", (m) => { metric = m; yearly && yearly.render(); });
-
     monthDayBySport(data);
-
-    chart("chart-months", (t) => Object.assign(base(t), {
-      grid: { left: 6, right: 14, top: 16, bottom: 6, containLabel: true },
-      xAxis: axisCat(t, MONTHS),
-      yAxis: axisVal(t, (v) => v + " h"),
-      tooltip: Object.assign(tooltipBase(t), { axisPointer: { type: "shadow", shadowStyle: { color: "rgba(0,0,0,.03)" } },
-                formatter: (ps) => ttHtml(ps[0].axisValue, [{ color: t.sport.run, name: "All years", value: num(ps[0].value) + " h" }]) }),
-      series: [{ type: "bar", data: data.month_hours, barMaxWidth: 24, itemStyle: { color: t.sport.run, borderRadius: [4, 4, 0, 0] } }],
-    }));
 
     chart("chart-weight", (t) => weightOption(t, data.weights.map((w) => [w[0], w[1]])));
   };
@@ -1608,6 +1660,100 @@
     window.__afterRerender = draw;
   };
 
+  // one course: every run on it, time against date (up is faster), coloured by kind
+  PAGES.courses = function (data) {
+    const R = data.rows;
+    const order = ["easy", "workout", "long", "race"];
+    const names = { easy: "Easy and other", workout: "Workouts", long: "Long runs", race: "Races and time trials" };
+    const groups = order.filter((g) => R.some((r) => r.group === g));
+    chart("chart-course", (t) => {
+      const best = Math.min(...R.map((r) => r.secs).filter(Boolean));
+      return Object.assign(base(t), {
+        grid: { left: 6, right: 14, top: 30, bottom: 6, containLabel: true },
+        legend: legend(t, groups.map((g) => names[g])),
+        xAxis: axisTime(t, timeSpan(R.map((r) => r.date))),
+        yAxis: axisVal(t, dur, { inverse: true, scale: true }),
+        tooltip: Object.assign(tooltipBase(t), {
+          trigger: "item",
+          formatter: (p) => {
+            const r = p.data.r;
+            return ttHtml(r.title, [
+              { name: dayLabel(r.date), value: "" },
+              { color: p.color, name: "Time", value: dur(r.secs) + (r.secs === best ? " (best)" : " (+" + dur(r.secs - best) + ")") },
+              { name: "Pace", value: pace(r.pace) + " /km" },
+              { name: "Heart rate", value: r.hr ? num(r.hr) + " bpm" : "-" },
+              { name: "Conditions", value: (r.temp != null ? num(r.temp) + "°C" : "") + (r.wind != null ? ", wind " + num(r.wind) + " km/h" : "") },
+            ].concat(r.kind ? [{ name: "Kind", value: r.kind }] : []));
+          },
+        }),
+        series: [{ name: "line", type: "line", data: R.map((r) => [r.date, r.secs]), showSymbol: false, silent: true, z: 1,
+                   lineStyle: { width: 1.5, color: t.lineStrong, type: "dashed" }, tooltip: { show: false } }].concat(groups.map((g) => ({
+          name: names[g], type: "scatter", symbolSize: 11, z: 3,
+          itemStyle: { color: t.group[g], borderColor: t.surface, borderWidth: 1.5 },
+          data: R.filter((r) => r.group === g).map((r) => ({ value: [r.date, r.secs], id: r.id, r })),
+        }))),
+      });
+    }, { after: (c) => c.on("click", (p) => { if (p.data && p.data.id) location.href = "/activity/" + p.data.id + "/"; }) });
+  };
+
+  /* ---------- phone menu: a panel under the top bar ---------- */
+  function initMenu() {
+    const btn = document.getElementById("nav-toggle");
+    const side = document.querySelector(".side");
+    if (!btn || !side) return;
+    const set = (on) => {
+      document.documentElement.style.setProperty("--bar-h", side.getBoundingClientRect().bottom + "px");
+      document.body.classList.toggle("nav-open", on);
+      btn.setAttribute("aria-expanded", on ? "true" : "false");
+      btn.querySelector("span").textContent = on ? "Close" : "Menu";
+    };
+    btn.addEventListener("click", () => set(!document.body.classList.contains("nav-open")));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
+    document.getElementById("main-nav").addEventListener("click", (e) => { if (e.target.closest("a")) set(false); });
+    window.addEventListener("resize", () => { if (window.innerWidth > 900) set(false); });
+  }
+
+  /* ---------- date picker: weeks start on Monday, whatever the browser's language ---------- */
+  function datePicker(input) {
+    const pop = document.createElement("div");
+    pop.className = "dp";
+    pop.hidden = true;
+    input.insertAdjacentElement("afterend", pop);
+    let view = null;
+    const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const read = () => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value.trim()); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+    function draw() {
+      const chosen = read(), today = new Date();
+      const first = new Date(view.getFullYear(), view.getMonth(), 1);
+      const lead = (first.getDay() + 6) % 7;  // Monday = 0
+      const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+      let h = `<div class="dp-head"><button type="button" data-dp="-1" aria-label="Previous month">&lsaquo;</button><span>${MONTHS[view.getMonth()]} ${view.getFullYear()}</span><button type="button" data-dp="1" aria-label="Next month">&rsaquo;</button></div><div class="dp-grid">`;
+      h += ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((n) => `<span class="dp-dow">${n}</span>`).join("");
+      for (let i = 0; i < lead; i++) h += "<span></span>";
+      for (let dnum = 1; dnum <= days; dnum++) {
+        const d = new Date(view.getFullYear(), view.getMonth(), dnum);
+        const cls = [chosen && iso(d) === iso(chosen) ? "is-on" : "", iso(d) === iso(today) ? "is-today" : ""].join(" ");
+        h += `<button type="button" class="${cls}" data-day="${iso(d)}">${dnum}</button>`;
+      }
+      pop.innerHTML = h + "</div>";
+    }
+    function open() { const c = read() || new Date(); view = new Date(c.getFullYear(), c.getMonth(), 1); draw(); pop.hidden = false; }
+    function close() { pop.hidden = true; }
+    input.addEventListener("focus", open);
+    input.addEventListener("click", open);
+    input.addEventListener("input", () => { if (read()) { open(); } });
+    input.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    pop.addEventListener("mousedown", (e) => e.preventDefault());  // keep focus in the input
+    pop.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.dataset.dp) { view.setMonth(view.getMonth() + Number(b.dataset.dp)); draw(); return; }
+      if (b.dataset.day) { input.value = b.dataset.day; close(); input.dispatchEvent(new Event("change")); }
+    });
+    document.addEventListener("click", (e) => { if (!pop.hidden && e.target !== input && !pop.contains(e.target)) close(); });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+  }
+
   /* ---------- boot ---------- */
   function boot() {
     initTheme();
@@ -1615,6 +1761,29 @@
     initFeed();
     initAutoSubmit();
     sparks();
+    // race form: "Other" distance shows a box for the kilometres
+    $$("[data-distance]").forEach((sel) => {
+      const box = sel.closest("form").querySelector("[data-other-km]");
+      const sync = () => { if (box) box.hidden = sel.value !== "other"; };
+      sel.addEventListener("change", sync);
+      sync();
+    });
+    $$("[data-datepicker]").forEach(datePicker);
+    initMenu();
+    // courses: hide the ones run only once (remembered in this browser)
+    const once = $("[data-hide-once]");
+    if (once) {
+      const apply = () => $$("[data-course-list] li").forEach((li) => { li.hidden = once.checked && li.dataset.count === "1"; });
+      try { once.checked = localStorage.getItem("hideOnce") === "1"; } catch (e) { /* storage blocked */ }
+      once.addEventListener("change", () => { try { localStorage.setItem("hideOnce", once.checked ? "1" : "0"); } catch (e) { /* ignore */ } apply(); });
+      apply();
+    }
+    // copy buttons (the plan page's prompt for an AI tool)
+    $$("[data-copy]").forEach((btn) => btn.addEventListener("click", () => {
+      const el = document.getElementById(btn.dataset.copy);
+      if (!el || !navigator.clipboard) return;
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => { const t = btn.textContent; btn.textContent = "Copied"; setTimeout(() => (btn.textContent = t), 1500); });
+    }));
     const page = document.body.dataset.page;
     const dataEl = document.getElementById("page-data");
     const data = dataEl ? JSON.parse(dataEl.textContent) : null;

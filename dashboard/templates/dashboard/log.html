@@ -1,0 +1,79 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Training log{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Training log</h1>
+  <p class="page-sub">Week by week, day by day. Runs show their distance and kind (warm-ups, cool-downs and strides are added to the run they belong to); other sports show their time.</p>
+</header>
+{% if data.empty %}
+<section class="empty"><p>Nothing here yet.</p></section>
+{% else %}
+<div class="log-legend" aria-hidden="true">
+  <span class="grp-easy"><i></i>Easy and other runs</span><span class="grp-workout"><i></i>Workouts</span><span class="grp-long"><i></i>Long runs</span><span class="grp-race"><i></i>Races and time trials</span><span class="log-other"><i></i>Other sports</span>{% if has_plan %}<span class="log-planned"><i></i>From your plan</span>{% endif %}
+</div>
+<section class="panel log-panel">
+  <div class="log-scroll">
+  <table class="log">
+    <thead>
+      <tr>
+        <th scope="col" class="log-week">Week</th>
+        {% for n in data.day_names %}<th scope="col" class="log-day-head">{{ n }}</th>{% endfor %}
+        <th scope="col" class="log-sum">Running</th>
+        <th scope="col" class="log-sum">Longest run</th>
+        <th scope="col" class="log-sum">Easy / hard</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for w in data.weeks %}
+      <tr class="{% if w.current %}is-current{% endif %}{% if w.future %} is-ahead{% endif %}">
+        <th scope="row" class="log-week">
+          <span class="log-dates">{% if w.start.month == w.end.month %}{{ w.start|date:"j" }}-{{ w.end|date:"j M" }}{% else %}{{ w.start|date:"j M" }} - {{ w.end|date:"j M" }}{% endif %}</span>
+          {% if w.start.year != today_year %}<span class="log-year">{{ w.start|date:"Y" }}</span>{% endif %}
+          {% if w.future %}<span class="log-time">planned</span>{% else %}<span class="log-time">{{ w.secs|hm }}</span>{% endif %}
+        </th>
+        {% for d in w.days %}
+        <td class="log-cell{% if d.today %} is-today{% endif %}{% if d.future %} is-future{% endif %}" data-day="{{ d.date|date:'D' }}">
+          {% for p in d.plan %}<div class="log-plan st-{{ p.status }}" title="{{ p.label }}{% if p.pace %}, {{ p.pace }} /km{% endif %}{% if p.desc %}: {{ p.desc }}{% endif %}{% if p.status != 'planned' %} ({{ p.status_label }}){% endif %}"><span>{% if p.km %}{{ p.km|kmv:1 }} {% elif p.min %}{{ p.min|num }}′ {% endif %}<em class="log-plan-kind{% if not p.km and not p.min %} keep{% endif %}">{{ p.kind }}</em></span></div>{% endfor %}
+          {% for c in d.cells %}
+          {% if c.cat == "run" %}
+          <a class="log-item grp-{{ c.group }}" href="{% url 'activity' c.id %}" title="{{ c.title }}, {{ c.time }}{% if c.extra_km %} (with {{ c.extra_km|kmv:1 }} km of warm-up, cool-down or strides){% endif %}">
+            <span class="log-km">{{ c.km|kmv:1 }}</span><span class="log-kind">{{ c.short }}</span>
+          </a>
+          {% else %}
+          <a class="log-item log-other sport-{{ c.cat }}" href="{% url 'activity' c.id %}" title="{{ c.title }}, {{ c.time }}">
+            {% sport_icon c.cat "icon" %}<span class="log-min">{{ c.min }}′</span>
+          </a>
+          {% endif %}
+          {% endfor %}
+        </td>
+        {% endfor %}
+        {% if w.future %}
+        <td class="log-sum"><strong>{{ w.plan_km|kmv:1 }} km</strong><span>planned</span></td><td class="log-sum"></td><td class="log-sum"></td>
+        {% else %}
+        <td class="log-sum">
+          {% if w.run_km %}<strong>{{ w.run_km|kmv:1 }} km</strong><span>{{ w.runs }} run{{ w.runs|pluralize }}{% if w.change is not None %}, {{ w.change|signed }}%{% endif %}</span>{% else %}<span>-</span>{% endif %}
+          {% if w.plan_km %}<span>planned {{ w.plan_km|kmv:1 }} km</span>{% endif %}
+        </td>
+        <td class="log-sum">
+          {% if w.long_id %}<a href="{% url 'activity' w.long_id %}"><strong>{{ w.long_km|kmv:1 }} km</strong></a><span>{{ w.long_share }}% of the week</span>{% else %}<span>-</span>{% endif %}
+        </td>
+        <td class="log-sum">
+          {% if w.easy_share is not None %}
+          <div class="log-split" role="img" aria-label="{{ w.easy_share }}% easy"><i style="width:{{ w.easy_share }}%"></i></div>
+          <span>{{ w.easy_share }}% easy</span>
+          {% else %}<span>-</span>{% endif %}
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="panel-note">Running: distance of every run that week, and the change from the week before. Easy / hard: running time in zones 1 and 2 against zones 3 to 5. Many coaches aim for about 80% easy.</p>
+</section>
+<nav class="log-pager">
+  {% if data.newer %}<a class="btn" href="?before={{ data.newer }}">Newer weeks</a>{% endif %}
+  {% if data.older %}<a class="btn" href="?before={{ data.older }}">Earlier weeks</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

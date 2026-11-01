@@ -1,13 +1,13 @@
 {% extends "dashboard/base.html" %}{% load static fmt %}
-{% block title %}{% if a.name %}{{ a.name }}{% else %}{{ label }}{% endif %}{% endblock %}
+{% block title %}{{ a.title }}{% endblock %}
 {% block main_class %}sport-{{ a.category }}{% endblock %}
 {% block head %}{% if map_config %}<link rel="stylesheet" href="{% static 'dashboard/vendor/leaflet/leaflet.css' %}">{% if map_config.vector %}<link rel="stylesheet" href="{% static 'dashboard/vendor/maplibre/maplibre-gl.css' %}">{% endif %}{% endif %}{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Activity navigation">
   <a href="{% if a.category == 'other' %}{% url 'sport' 'other' %}{% else %}{% url 'sport' page %}{% endif %}">{{ label }}</a>
   <span class="crumbs-pager">
-    {% if d.next %}<a href="{% url 'activity' d.next.activity_id %}" title="{{ d.next.name }}">Newer</a>{% endif %}
-    {% if d.prev %}<a href="{% url 'activity' d.prev.activity_id %}" title="{{ d.prev.name }}">Older</a>{% endif %}
+    {% if d.next %}<a href="{% url 'activity' d.next.activity_id %}" title="{{ d.next.title }}">Newer</a>{% endif %}
+    {% if d.prev %}<a href="{% url 'activity' d.prev.activity_id %}" title="{{ d.prev.title }}">Older</a>{% endif %}
   </span>
 </nav>
 <header class="act-head sport-{{ a.category }}">
@@ -15,7 +15,7 @@
   <div class="act-title">
     <span class="act-icon">{% sport_icon a.category "icon icon-lg" %}</span>
     <div>
-      <h1 class="display display-md">{% if a.name %}{{ a.name }}{% else %}{{ a.type_key|typelabel }}{% endif %}</h1>
+      <h1 class="display display-md">{{ a.title }}</h1>
       <p class="page-sub">
         <time datetime="{{ a.start_local|date:'c' }}">{{ a.start_local|date:"l j F Y" }}, {{ a.start_local|date:"H:i" }}</time>
         <span class="sep">{{ a.type_key|typelabel }}</span>
@@ -23,6 +23,10 @@
         {% if kind_label %}<a class="chip chip-kind grp-{{ a.kind|kindgroup }}" href="{% url 'sport_kind' page a.kind %}">{{ kind_label }}</a>{% elif a.event_type == "race" %}<span class="chip chip-race">Race</span>{% endif %}
         {% if a.te_label|telabel %}<span class="chip">Garmin: {{ a.te_label|telabel }}</span>{% endif %}
       </p>
+      {% if session %}<p class="act-session">{% if session.main.pk == a.pk %}Session:{% else %}Part of a session:{% endif %}
+        {% for p in session.parts %}{% if p.act.pk == a.pk %}<strong>{{ p.role }} {{ p.act.distance_km|kmv:1 }} km</strong>{% else %}<a href="{% url 'activity' p.act.pk %}">{{ p.role }} {{ p.act.distance_km|kmv:1 }} km</a>{% endif %}{% if not forloop.last %}<span class="sep-dot" aria-hidden="true">·</span>{% endif %}{% endfor %}
+        <span class="act-session-total">{{ session.km|kmv:1 }} km in all</span></p>{% endif %}
+      {% if course and course.count > 1 %}<p class="act-session">Course: <a href="{% url 'course' course.id %}">{{ course.name }}</a>, run {{ course.count }} times. {% if course.rank == 1 %}<strong>Fastest time on it.</strong>{% else %}{{ course.rank|ordinal_rank }} fastest of {{ course.count }}, best {{ course.best|dur }}.{% endif %}</p>{% endif %}
     </div>
   </div>
 </header>
@@ -125,7 +129,7 @@
   {% if d.splits %}
   <section class="panel splits-panel">
     <div class="panel-head"><h2>Splits</h2><span class="panel-note">per {% if a.category == "cycle" %}5 km{% else %}km{% endif %}</span></div>
-    <div class="table-scroll">
+    <div class="table-scroll table-scroll-full">
     <table class="table table-splits">
       <thead><tr><th scope="col">{% if a.category == "cycle" %}5 km{% else %}Km{% endif %}</th><th scope="col">{% if pace_mode %}Pace{% else %}Time{% endif %}</th><th scope="col" class="num">HR</th><th scope="col" class="num">Climb</th>{% if d.split_wind %}<th scope="col" class="num" title="Headwind (+) or tailwind (-), km/h">Wind</th>{% endif %}</tr></thead>
       <tbody>
@@ -159,6 +163,44 @@
   </div>
   <div id="stream-charts" class="stream-charts"></div>
 </section>
+{% if analysis %}{% with an=analysis %}
+{% if an.marks %}
+<section class="panel analysis-note">
+  <div class="panel-head"><h2>Heart rate that did not follow pace</h2></div>
+  <p class="panel-note">Shaded on the heart rate chart: {% for m in an.marks %}{{ m.0|dur }} to {{ m.1|dur }}{% if not forloop.last %}, {% endif %}{% endfor %}. After the first 5 minutes, heart rate moved more than 25 bpm within 30 seconds while pace stayed within 15%. It often means a strap or the optical sensor took a while to lock on, but it can be real. The download for AI gives heart rate with and without these stretches.</p>
+</section>
+{% endif %}
+{% if an.decoupling or an.shape %}
+<div class="grid grid-2">
+  {% if an.decoupling %}{% with dc=an.decoupling %}
+  <section class="panel">
+    <div class="panel-head"><h2>Aerobic decoupling</h2><span class="panel-note">first half against second half</span></div>
+    <p class="decouple-figure"><strong>{{ dc.pa_hr|num:1 }}%</strong> pace to heart rate{% if dc.pw_hr is not None %}<span>{{ dc.pw_hr|num:1 }}% power to heart rate</span>{% endif %}</p>
+    <table class="table">
+      <thead><tr><th scope="col">Half</th><th scope="col" class="num">From</th><th scope="col" class="num">Pace</th><th scope="col" class="num">HR</th><th scope="col" class="num">m per beat</th><th scope="col" class="num">Headwind</th></tr></thead>
+      <tbody>
+      {% for h in dc.halves %}<tr><th scope="row">{% if forloop.first %}First{% else %}Second{% endif %}</th><td class="num">{{ h.from|dur }}</td><td class="num">{{ h.spd|speed_pace }}</td><td class="num">{{ h.hr|num }}</td><td class="num">{{ h.ef|num:3 }}</td><td class="num">{% if h.wind is not None %}{{ h.wind|signed:0 }} km/h{% else %}-{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <p class="panel-note">How much heart rate rose for the same pace over the steady part of the run (warm-up{% if dc.cut_at_block %} and fast finish{% endif %} left out). Under 5% usually means the pace sat well within your aerobic endurance; hills, wind and heat push it up.</p>
+  </section>
+  {% endwith %}{% endif %}
+  {% if an.shape %}
+  <section class="panel{% if not an.decoupling %} span-2{% endif %}">
+    <div class="panel-head"><h2>{% if an.shape.kind == "out_and_back" %}Out and back{% else %}Laps of the circuit{% endif %}</h2><span class="panel-note">{% if an.shape.kind == "out_and_back" %}split at the turning point{% else %}{{ an.shape.laps }} laps of about {{ an.shape.lap_m|num }} m{% endif %}, from the GPS track</span></div>
+    <div class="table-scroll table-scroll-full">
+    <table class="table">
+      <thead><tr><th scope="col">Part</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">Pace</th><th scope="col" class="num">HR</th><th scope="col" class="num">Climb</th><th scope="col" class="num">Headwind</th></tr></thead>
+      <tbody>
+      {% for r in an.shape.rows %}<tr><th scope="row">{{ r.name }}</th><td class="num">{{ r.dist|km }} km</td><td class="num">{{ r.secs|dur }}</td><td class="num">{{ r.pace|pace }}</td><td class="num">{{ r.hr|num }}{% if r.hr_clean %}<span class="sub">{{ r.hr_clean|num }} unmarked</span>{% endif %}</td><td class="num">{{ r.up|num }} m</td><td class="num">{% if r.wind is not None %}{{ r.wind|signed:0 }} km/h{% else %}-{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+{% endwith %}{% endif %}
 {% else %}
 <section class="panel">
   <p class="panel-note">{% if a.detail_status == "pending" %}The detailed recording for this activity has not been downloaded yet. It comes with the next sync.{% elif a.detail_status == "error" %}The recording could not be read: {{ a.detail_error }}{% else %}Garmin has no detailed recording for this activity.{% endif %}</p>
@@ -199,7 +241,7 @@
   {% endif %}
   {% if d.compare %}
   <section class="panel">
-    <div class="panel-head"><h2>Against your last 90 days</h2><span class="panel-note">{{ d.compare.n }} {{ label|lower }} activities</span></div>
+    <div class="panel-head"><h2>Against your last 90 days</h2><span class="panel-note">{% if d.compare.kind %}{{ d.compare.n }} {{ d.compare.kind }}{% else %}{{ d.compare.n }} {{ label|lower }} activities{% endif %}</span></div>
     <dl class="compare">
       {% if d.compare.dist_avg and a.distance_m %}<div><dt>Distance</dt><dd>{{ a.distance_km|kmv:1 }} km <span>vs {{ d.compare.dist_avg|kmv:1 }} km on average. Longer than {{ d.compare.longer_than }}% of them.</span></dd></div>{% endif %}
       {% if d.compare.pace_avg and a.pace_s_per_km and pace_mode %}<div><dt>Pace</dt><dd>{{ a.pace_s_per_km|pace }} /km <span>vs a median of {{ d.compare.pace_avg|pace }} /km</span></dd></div>{% endif %}

@@ -32,7 +32,7 @@ RUN_TYPES = [
     ("warmup", "Warm-up & cool-down"),
 ]
 RUN_TYPE_LABEL = dict(RUN_TYPES)
-RULES_VERSION = 2   # raise when the rules change: every run is sorted again once
+RULES_VERSION = 4   # raise when the rules change: every run is sorted again once
 RUN_TYPE_KEYS = [k for k, _ in RUN_TYPES]
 
 # colour groups (four, so charts stay readable): fixed order = fixed colours
@@ -304,6 +304,90 @@ def _progression(act, easy_pace=None):
     return None
 
 
+# heart rate bands for "pace at the same effort": easy running sits in zone 2, tempo and threshold work in
+# zones 3 to 4, races in zones 4 to 5 (from the runner's own zones, so the same chart works for anyone)
+ZONE_BANDS = [("z2", "Zone 2", 1, 2, 300), ("z34", "Zones 3 to 4", 2, 4, 300), ("z45", "Zones 4 to 5", 3, 5, 180)]
+
+
+def zone_paces(stream, floors, skip=180.0):
+    """Average pace while heart rate was inside each band, leaving out the first 3 minutes (heart rate lags
+    behind pace at the start) and stops. Only bands with enough time in them (5 minutes, 3 for zones 4 to 5)."""
+    t, d, hr = (stream or {}).get("t"), (stream or {}).get("d"), (stream or {}).get("hr")
+    if not t or not d or not hr or not floors or len(floors) < 5:
+        return {}
+    edges = list(floors) + [10 ** 6]
+    acc = {k: [0.0, 0.0, 0.0] for k, *_ in ZONE_BANDS}  # seconds, metres, heartbeats
+    for i in range(1, len(t)):
+        h, dt = hr[i], (t[i] - t[i - 1])
+        if h is None or t[i] < skip or dt <= 0 or dt > 30 or d[i] is None or d[i - 1] is None:
+            continue
+        dist = d[i] - d[i - 1]
+        if dist / dt < 1.6:  # walking or standing
+            continue
+        for key, _label, lo, hi, _min in ZONE_BANDS:
+            if edges[lo] <= h < edges[hi]:
+                a = acc[key]
+                a[0] += dt
+                a[1] += dist
+                a[2] += h * dt
+    out = {}
+    for key, _label, _lo, _hi, min_s in ZONE_BANDS:
+        secs, dist, beats = acc[key]
+        if secs >= min_s and dist > 0:
+            out[key] = {"pace": round(secs / (dist / 1000.0), 1), "secs": round(secs), "hr": round(beats / secs)}
+    return out
+
+
+FRAGMENTS = ("warmup", "strides")
+SESSION_GAP = timedelta(minutes=40)
+
+
+def _end(r):
+    return r.start_local + timedelta(seconds=r.elapsed_s or r.duration_s or r.time_s or 0)
+
+
+def group_sessions(runs=None):
+    """Attach warm-ups, cool-downs and strides to the run they belong to: runs on the same day that follow each
+    other with at most 40 minutes between one ending and the next starting form one session, and every
+    fragment in it points to the nearest main run. Returns how many links changed."""
+    from .models import Activity
+    if runs is None:
+        runs = list(Activity.objects.filter(category="run").order_by("start_local"))
+    runs = sorted(runs, key=lambda r: r.start_local)
+    clusters, cur = [], []
+    for r in runs:
+        if cur and (r.start_local.date() != cur[-1].start_local.date() or r.start_local - _end(cur[-1]) > SESSION_GAP):
+            clusters.append(cur)
+            cur = []
+        cur.append(r)
+    if cur:
+        clusters.append(cur)
+    changed = 0
+    for cl in clusters:
+        mains = [r for r in cl if (r.kind or "") not in FRAGMENTS]
+        for r in cl:
+            parent = None
+            if mains and (r.kind or "") in FRAGMENTS:
+                def gap(m):
+                    if _end(m) <= r.start_local:
+                        return (r.start_local - _end(m)).total_seconds()
+                    return max((m.start_local - _end(r)).total_seconds(), 0)
+                parent = min(mains, key=gap)
+            pid = parent.pk if parent else None
+            if r.session_of_id != pid:
+                r.session_of_id = pid
+                Activity.objects.filter(pk=r.pk).update(session_of=pid)
+                changed += 1
+    return changed
+
+
+def session_role(extra, main):
+    """'Warm-up', 'Cool-down' or 'Strides' for a fragment of a session."""
+    if (extra.kind or "") == "strides":
+        return "Strides"
+    return "Warm-up" if extra.start_local < main.start_local else "Cool-down"
+
+
 def classify_runs(qs=None, only_missing=False):
     """Classify running activities in date order. Returns how many changed."""
     from .models import Activity, KeyValue
@@ -319,10 +403,22 @@ def classify_runs(qs=None, only_missing=False):
         if only_missing and act.run_type:
             continue
         kind, reason, info = classify(act, refs, runs, floors)
+        if act.stream_id_safe:
+            zp = zone_paces(act.stream.data, floors)
+            if zp:
+                info["zone_pace"] = zp
+            if kind in ("easy", "long", "steady", "recovery"):
+                from .export import decoupling, stored_recording
+                rec = stored_recording(act)
+                dec = decoupling(rec, kind, info.get("blocks") or []) if rec else None
+                if dec:
+                    info["decoupling"] = round(dec["pa_hr"], 1)
         if (kind, reason) != (act.run_type, act.run_type_reason) or info != act.run_type_info:
             act.run_type, act.run_type_reason, act.run_type_info = kind, reason[:255], info
             act.save(update_fields=["run_type", "run_type_reason", "run_type_info"])
             changed += 1
+    if qs is None:
+        group_sessions(runs)
     return changed
 
 

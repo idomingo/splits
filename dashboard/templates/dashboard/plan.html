@@ -1,0 +1,77 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Training plan{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Training plan</h1>
+  <p class="page-sub">Import a plan as a CSV file (from a coach, a spreadsheet or an AI tool) and the app compares every day with what you actually did. Planned sessions also show in the training log and in the download for AI.</p>
+</header>
+
+{% if result %}
+<section class="panel {% if result.errors %}result-bad{% else %}result-ok{% endif %}">
+  {% if result.errors %}<p><strong>Nothing was imported.</strong> Fix these lines and try again:</p><ul>{% for e in result.errors|slice:":20" %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% else %}<p><strong>Imported {{ result.count }} session{{ result.count|pluralize }}.</strong></p>{% endif %}
+</section>
+{% endif %}
+
+{% if not data.empty %}
+<div class="kpis">
+  <div class="kpi"><p class="kpi-label">Plan</p><p class="kpi-value kpi-text">{{ data.first|date:"j M" }} to {{ data.last|date:"j M Y" }}</p><p class="kpi-meta">{{ data.count }} sessions</p></div>
+  {% if data.past_n %}
+  <div class="kpi"><p class="kpi-label">Last 4 weeks</p><p class="kpi-value">{{ data.past_done }}<small> of {{ data.past_n }}</small></p><p class="kpi-meta">sessions done as planned</p></div>
+  <div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ data.done_km|kmv:0 }}<small> of {{ data.planned_km|kmv:0 }} km</small></p><p class="kpi-meta">run against planned</p></div>
+  {% endif %}
+</div>
+<section class="panel">
+  <div class="panel-head"><h2>Four weeks back, two weeks ahead</h2></div>
+  <div class="table-scroll table-scroll-full">
+  <table class="table plan-table">
+    <thead><tr><th scope="col">Day</th><th scope="col">Planned</th><th scope="col" class="num">Distance</th><th scope="col">Pace</th><th scope="col">Done</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+    {% for x in data.days %}
+      <tr class="{% if x.today %}is-today{% endif %}{% if not x.past and not x.today %} is-future{% endif %}">
+        <th scope="row">{{ x.s.date|date:"D j M" }}</th>
+        <td><strong>{{ x.s.title|default:x.label }}</strong>{% if x.s.title and x.s.title != x.label %}<span class="sub">{{ x.label }}</span>{% endif %}{% if x.s.description %}<span class="sub">{{ x.s.description }}</span>{% endif %}</td>
+        <td class="num">{% if x.s.distance_km %}{{ x.s.distance_km|kmv:1 }} km{% elif x.s.duration_min %}{{ x.s.duration_min|num }} min{% else %}-{% endif %}</td>
+        <td>{{ x.s.pace|default:"-" }}</td>
+        <td>{% for a in x.done %}<a href="{% url 'activity' a.id %}">{{ a.title }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</td>
+        <td><span class="plan-status st-{{ x.status }}">{{ x.status_label }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="panel-note">Done means a run that day within 20% of the planned distance (warm-ups and cool-downs count with their run). The whole plan, day by day, is in the <a href="{% url 'log' %}">training log</a>.</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><h2>Import a plan</h2><a class="link" href="{% url 'plan_template' %}">Download a template</a></div>
+  <form method="post" enctype="multipart/form-data" class="plan-form">{% csrf_token %}
+    <label>CSV file<input type="file" name="file" accept=".csv,text/csv,text/plain"></label>
+    <label>or paste it here<textarea name="text" rows="6" placeholder="date,kind,title,distance_km,duration_min,pace,description"></textarea></label>
+    <fieldset class="plan-replace">
+      <label><input type="radio" name="replace" value="range" checked> Replace only the dates in the file</label>
+      <label><input type="radio" name="replace" value="all"> Replace the whole plan</label>
+    </fieldset>
+    <div class="rf-actions"><button type="submit" class="btn btn-primary">Import</button>{% if not data.empty %}<button type="submit" name="clear" value="1" class="btn btn-quiet">Delete the plan</button>{% endif %}</div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>The format</h2></div>
+  <p>One row per session, with this header row. Only <code>date</code> and <code>kind</code> are needed.</p>
+  <pre class="code">date,kind,title,distance_km,duration_min,pace,description
+2026-11-04,threshold,3 x 10 min threshold,10,,5:05,"2 km warm-up; 3 x 10 min, 2 min jog; cool-down"
+2026-11-05,rest,Rest,,,,</pre>
+  <ul class="format-list">
+    <li><code>date</code>: YYYY-MM-DD.</li>
+    <li><code>kind</code>: {% for k, v in kinds.items %}<code>{{ k }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.</li>
+    <li><code>distance_km</code>: the whole session, warm-up and cool-down included. <code>duration_min</code>: for sessions planned by time.</li>
+    <li><code>pace</code>: free text, such as <code>5:05</code> or <code>6:10-6:30</code>.</li>
+    <li>A description with commas goes in double quotes. Commas, semicolons or tabs between columns all work.</li>
+  </ul>
+  <div class="panel-head"><h2>Ask an AI tool for it</h2><button type="button" class="btn" data-copy="ai-prompt">Copy</button></div>
+  <p class="panel-note">Paste this after your request ("a 6-week plan for a half marathon on 6 December, 4 runs a week..."), then save the answer as a .csv file or paste it into the box above.</p>
+  <pre class="code" id="ai-prompt">{{ prompt }}</pre>
+</section>
+{% endblock %}

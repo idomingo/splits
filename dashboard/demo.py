@@ -95,13 +95,18 @@ class Demo:
                     self.run(d, "easy", 6000 + 2000 * f + r.uniform(-800, 800), place=trip, hour=7)
         elif not broke:
             if race:
-                self.run(d, "race", race[0], name=race[1], place="river", hour=9)
+                start, end = self.run(d, "race", race[0], name=race[1], place="river", hour=9)
+                # a warm-up before and a cool-down after: one session on the dashboard
+                self.run(d, "easy", 2000 + r.uniform(-300, 300), place="river", start=start - timedelta(minutes=24))
+                if r.random() < 0.6:
+                    self.run(d, "recovery", 1500 + r.uniform(-300, 300), place="river", start=end + timedelta(minutes=6))
             elif wd == 1 and r.random() < 0.85:
                 self.run(d, "intervals", 9000, place="track", hour=19)
             elif wd == 3 and r.random() < 0.8:
                 self.run(d, "tempo", 9000 + 2000 * f, place="office", hour=12)
             elif wd == 4 and r.random() < 0.35:
-                self.run(d, "tt5k", 5000, name="Track 5K time trial", place="track", hour=18)
+                start, _end = self.run(d, "tt5k", 5000, name="Track 5K time trial", place="track", hour=18)
+                self.run(d, "easy", 2000 + r.uniform(-300, 300), place="track", start=start - timedelta(minutes=22))
             elif wd == 6 and r.random() < 0.85:
                 self.run(d, "long", 13000 + 8000 * f + r.uniform(-1500, 1500), place="dunes", hour=8)
             elif wd in (0, 4, 5) and r.random() < 0.55:
@@ -146,17 +151,21 @@ class Demo:
             return [(dist, p[key], None)]
         return [(dist, p[kind], None)]
 
-    def run(self, d, kind, dist, name=None, place="park", hour=7):
+    def run(self, d, kind, dist, name=None, place="park", hour=7, start=None):
+        """One run; returns its start and end. Time trials, races and recovery runs keep to the same route
+        each time (a course), the others wander."""
         r = self.rng
         f = self.fitness(d)
         segs = self.segments(kind, dist, f)
         v_thr = 1000.0 / (self.pace_targets(f)["tempo"] - 4)
-        start = datetime.combine(d, time(hour, r.randint(0, 40), r.randint(0, 59)))
+        start = start or datetime.combine(d, time(hour, r.randint(0, 40), r.randint(0, 59)))
+        course = f"{place}-{kind}-{round(dist / 1000)}" if kind in ("tt5k", "race", "recovery") and dist >= 4000 else None
         samples, laps = self.simulate(segs, start, place, dt=2.0, v_thr=v_thr, kind="run",
-                                      auto_lap=kind not in ("intervals", "tempo"))
+                                      auto_lap=kind not in ("intervals", "tempo"), course=course)
         town = PLACES[place][0]
         label = {"race": name, "tt5k": name}.get(kind) or f"{town} Running"
         self.add("running", label, start, samples, laps, kind=kind, race=(kind == "race"))
+        return start, start + timedelta(seconds=samples["t"][-1])
 
     def walk(self, d, place="park"):
         r = self.rng
@@ -188,12 +197,18 @@ class Demo:
             hr.append(round(h))
         self.add("strength_training", "Strength", start, {"t": t, "hr": hr}, [], kind="strength")
 
-    def simulate(self, segs, start, place, dt, v_thr, kind, auto_lap, lap_every=1000):
+    def simulate(self, segs, start, place, dt, v_thr, kind, auto_lap, lap_every=1000, course=None):
         r = self.rng
         _town, lat, lon, base_alt = PLACES[place]
         total = sum(s[0] for s in segs)
         heading = r.uniform(0, 2 * math.pi)
         turn = 2 * math.pi / max(total, 1) * r.choice([-1, 1]) * r.uniform(0.85, 1.15)
+        wobble = 0.03
+        if course:  # the same loop every time: fixed start heading and direction, little wobble
+            cr = random.Random(course)
+            heading = cr.uniform(0, 2 * math.pi)
+            turn = 2 * math.pi / max(total, 1) * cr.choice([-1, 1])
+            wobble = 0.004
         hill_a, hill_b = r.uniform(4, 14), r.uniform(1, 5)
         ph1, ph2 = r.uniform(0, 6), r.uniform(0, 6)
         t = dist = 0.0
@@ -233,7 +248,7 @@ class Demo:
             if kind == "walk":
                 target_hr = 88 + 30 * (v / 1.6) ** 2
             hr += (target_hr - hr) * (dt / 28.0)
-            heading += turn * v * dt + r.gauss(0, 0.03)
+            heading += turn * v * dt + r.gauss(0, wobble)
             step = v * dt
             lat += step * math.cos(heading) / 111320.0
             lon += step * math.sin(heading) / (111320.0 * math.cos(math.radians(lat)))

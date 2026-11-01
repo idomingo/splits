@@ -10,10 +10,10 @@ class DashboardConfig(AppConfig):
     name = "dashboard"
 
     def ready(self):
-        # The dev server reloads itself when the code changes (new files from an update), but run.sh only
+        # The dev server reloads itself when the code changes (new files from an update), but `start` only
         # migrates once at start. Apply any new migrations in the serving process so a reload never meets
         # an old database.
-        if "runserver" not in sys.argv:
+        if "runserver" not in sys.argv and "start" not in sys.argv:
             return
         if os.environ.get("RUN_MAIN") != "true" and "--noreload" not in sys.argv:
             return

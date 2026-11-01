@@ -1,0 +1,30 @@
+{% extends "dashboard/base.html" %}{% load fmt %}
+{% block title %}Courses{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1 class="display">Courses</h1>
+  <p class="page-sub">Every race and time trial, grouped by course from the GPS track: same start and finish, same distance, and most of the way on the same roads. Training runs are left out: only a full effort on the same course is a fair comparison.</p>
+</header>
+{% if not courses %}
+<section class="empty"><p>No race or time trial with a GPS track yet.</p></section>
+{% else %}
+{% if once %}<label class="toggle-line"><input type="checkbox" data-hide-once> Hide courses run only once ({{ once }})</label>{% endif %}
+<ul class="course-list" data-course-list>
+  {% for c in courses %}
+  <li data-count="{{ c.count }}">
+    <a class="course-card" href="{% url 'course' c.id %}">
+      <span class="course-thumb" aria-hidden="true">{% if c.route %}<svg viewBox="0 0 100 100"><path d="{{ c.route }}"/></svg>{% endif %}</span>
+      <span class="course-body">
+        <span class="course-name">{{ c.name }}</span>
+        <span class="course-meta">{% if c.count == 1 %}Once, {{ c.first|date:"j M Y" }}{% else %}{{ c.count }} times, {{ c.first|date:"j M Y" }} to {{ c.last|date:"j M Y" }}{% endif %}</span>
+        <span class="course-stats">
+          {% if c.best %}<span><em>Best</em>{{ c.best.secs|dur }} <small>{{ c.best.date|date:"j M" }}</small></span>{% endif %}
+          {% if c.latest and c.count > 1 %}<span><em>Last</em>{{ c.latest.secs|dur }} <small>{% if c.latest.behind %}+{{ c.latest.behind|dur }}{% else %}best{% endif %}</small></span>{% endif %}
+        </span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

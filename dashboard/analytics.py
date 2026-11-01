@@ -15,7 +15,7 @@ from .sports import (BEST_EFFORT_DISTANCES, BEST_EFFORT_LABELS, CATEGORY_KEYS, C
 
 FIELDS = ("activity_id", "name", "category", "type_key", "start_local", "distance_m", "duration_s", "moving_s",
           "elev_gain_m", "avg_hr", "max_hr", "training_load", "avg_cadence", "te_label", "event_type", "calories",
-          "avg_speed", "run_type", "run_type_manual", "place_id")
+          "avg_speed", "run_type", "run_type_manual", "place_id", "session_of")
 
 
 def week_start(d):
@@ -41,10 +41,20 @@ def kind_q(kind):
 
 def rows(qs=None):
     qs = qs if qs is not None else Activity.objects.all()
+    from .models import Place
+    from .sports import activity_title
     out = list(qs.order_by("start_local").values(*FIELDS))
+    labels = {p.pk: p.label for p in Place.objects.filter(pk__in={r["place_id"] for r in out if r["place_id"]})}
     for r in out:
         r["kind"] = r["run_type_manual"] or r["run_type"] or ""
+        r["title"] = activity_title(r["category"], r["kind"], r["type_key"], r["name"], labels.get(r["place_id"], ""),
+                                    r["distance_m"])
     return out
+
+
+def is_fragment(r):
+    """A warm-up, cool-down or strides run that belongs to another run (kept out of averages and counts)."""
+    return bool(r.get("session_of"))
 
 
 def sports_present():
@@ -53,11 +63,14 @@ def sports_present():
 
 
 # ---------- shared ----------
-def totals(items):
+def totals(items, sessions=True):
+    """Distance and time count everything; the count is of sessions (a warm-up and cool-down with their run
+    count once), unless sessions=False."""
     dist = sum((r["distance_m"] or 0) for r in items)
     secs = sum(t_of(r) for r in items)
     elev = sum((r["elev_gain_m"] or 0) for r in items)
-    return {"count": len(items), "km": dist / 1000.0, "hours": secs / 3600.0, "secs": secs, "elev": elev}
+    count = sum(1 for r in items if not (sessions and is_fragment(r)))
+    return {"count": count, "km": dist / 1000.0, "hours": secs / 3600.0, "secs": secs, "elev": elev}
 
 
 def ewma(values, span_days):
@@ -116,7 +129,7 @@ def overview():
     for i in range(7):
         d = this_week + timedelta(days=i)
         acts = [{"cat": r["category"], "min": round(t_of(r) / 60), "km": round((r["distance_m"] or 0) / 1000, 1),
-                 "id": r["activity_id"], "name": r["name"]}
+                 "id": r["activity_id"], "name": r["title"]}
                 for r in week_items if r["start_local"].date() == d]
         days.append({"date": d.isoformat(), "label": d.strftime("%a"), "acts": acts, "future": d > today})
     by_sport_week = []
@@ -127,7 +140,9 @@ def overview():
             by_sport_week.append({"cat": c, "label": CATEGORY_LABEL[c], **t})
 
     # weekly volume for 26 weeks, by sport
-    n_weeks = 26
+    # the last 26 weeks, or since the week of the first activity when that is more recent
+    first_week = week_start(all_rows[0]["start_local"])
+    n_weeks = max(1, min(26, (this_week - first_week).days // 7 + 1))
     weeks = [this_week - timedelta(weeks=n_weeks - 1 - i) for i in range(n_weeks)]
     idx = {w: i for i, w in enumerate(weeks)}
     hours = {c: [0.0] * n_weeks for c in sports}
@@ -141,20 +156,10 @@ def overview():
               "hours": {c: [round(v, 2) for v in hours[c]] for c in sports},
               "km": {c: [round(v, 1) for v in km[c]] for c in sports if any(km[c])}}
 
-    # training load: acute (7 d) vs chronic (42 d)
-    load_start = today - timedelta(days=180 + 42)
-    daily_load = defaultdict(float)
-    for r in all_rows:
-        if r["start_local"].date() >= load_start:
-            daily_load[r["start_local"].date()] += r["training_load"] or (t_of(r) / 60 * 0.8 if r["avg_hr"] else 0)
-    span = [load_start + timedelta(days=i) for i in range((today - load_start).days + 1)]
-    vals = [daily_load.get(d, 0.0) for d in span]
-    acute, chronic = boxcar(vals, 7), boxcar(vals, 42)
-    cut = 42
-    load = {"dates": [d.isoformat() for d in span[cut:]], "acute": acute[cut:], "chronic": chronic[cut:]}
+    load = training_load(all_rows, today)
 
-    # calendar: minutes per day for a year
-    cal_start = today - timedelta(days=364)
+    # calendar: minutes per day, for the last year or since the first activity
+    cal_start = max(today - timedelta(days=364), all_rows[0]["start_local"].date())
     per_day = defaultdict(float)
     for r in all_rows:
         if r["start_local"].date() >= cal_start:
@@ -172,7 +177,69 @@ def overview():
         "calendar": calendar,
         "tiles": health_tiles(),
         "sports": sports,
+        "next_race": _next_race(today),
     }
+
+
+def _next_race(today):
+    from .models import Race
+    from .racing import prediction
+    r = Race.objects.filter(date__gte=today).order_by("date").first()
+    if not r:
+        return None
+    return {"race": r, "days": (r.date - today).days, "pred": prediction(r.distance_m)}
+
+
+LOAD_BANDS = [(0.8, "low", "Easing off: the last 7 days were lighter than your usual week."),
+              (1.3, "ok", "Steady: the last 7 days were close to your usual week."),
+              (1.5, "high", "Building fast: the last 7 days were well above your usual week."),
+              (99, "spike", "A big jump: the last 7 days were more than half again your usual week. Jumps like "
+                            "this are when injuries tend to happen.")]
+
+
+def training_load(items, today, days=182):
+    """Load of the last 7 days against your usual week (the average week of the last 28 days).
+
+    Load is Garmin's training load per activity (from heart rate); an activity without one counts 0.8 a minute
+    when it has heart rate. The ratio of the two is the acute to chronic workload ratio: about 0.8 to 1.3 is a
+    steady build, above 1.5 a jump."""
+    first = items[0]["start_local"].date()
+    start = today - timedelta(days=days + 28)
+    daily = defaultdict(float)
+    for r in items:
+        d = r["start_local"].date()
+        if d >= start:
+            daily[d] += r["training_load"] or (t_of(r) / 60 * 0.8 if r["avg_hr"] else 0)
+    span = [start + timedelta(days=i) for i in range((today - start).days + 1)]
+    vals = [daily.get(d, 0.0) for d in span]
+    acute, usual, ratio = [], [], []
+    for i, d in enumerate(span):
+        a = sum(vals[max(0, i - 6):i + 1])
+        c = sum(vals[max(0, i - 27):i + 1]) / 4.0
+        acute.append(round(a))
+        usual.append(round(c))
+        # the ratio needs four weeks of history to mean anything
+        ratio.append(round(a / c, 2) if c > 0 and (d - first).days >= 27 else None)
+    cut = 28
+    span, acute, usual, ratio = span[cut:], acute[cut:], usual[cut:], ratio[cut:]
+    keep = next((i for i, d in enumerate(span) if d >= first - timedelta(days=7)), 0)
+    span, acute, usual, ratio = span[keep:], acute[keep:], usual[keep:], ratio[keep:]
+    now = ratio[-1] if ratio else None
+    band = next((b for b in LOAD_BANDS if now is not None and now < b[0]), None)
+
+    # running distance: this week so far against the four weeks before
+    wk = week_start(today)
+    run_km = lambda a, b: sum((r["distance_m"] or 0) for r in items
+                              if r["category"] == "run" and a <= r["start_local"].date() < b) / 1000.0
+    last7 = run_km(today - timedelta(days=6), today + timedelta(days=1))
+    prev4 = run_km(today - timedelta(days=34), today - timedelta(days=6)) / 4.0
+    return {"dates": [d.isoformat() for d in span], "acute": acute, "usual": usual, "ratio": ratio,
+            "now": {"acute": acute[-1] if acute else 0, "usual": usual[-1] if usual else 0, "ratio": now,
+                    "state": band[1] if band else "", "text": band[2] if band else
+                    "The ratio shows up after four weeks of activities.",
+                    "run_km7": round(last7, 1), "run_km_usual": round(prev4, 1),
+                    "run_change": round(100 * (last7 - prev4) / prev4) if prev4 >= 5 else None},
+            "week_start": wk.isoformat()}
 
 
 # ---------- sport pages ----------
@@ -224,11 +291,13 @@ def sport(category, kind=None, area=None):
     is_run = category == "run"
     year0 = date(today.year, 1, 1)
     m0 = today.replace(day=1)
-    t_all = totals(items)
-    t_year = totals([r for r in items if r["start_local"].date() >= year0])
-    t_month = totals([r for r in items if r["start_local"].date() >= m0])
+    # on the page of warm-ups or strides every one counts; elsewhere they count with the run they belong to
+    sess = kind not in ("warmup", "strides")
+    t_all = totals(items, sess)
+    t_year = totals([r for r in items if r["start_local"].date() >= year0], sess)
+    t_month = totals([r for r in items if r["start_local"].date() >= m0], sess)
     last12 = [r for r in items if r["start_local"].date() >= week_start(today) - timedelta(weeks=12)]
-    t12 = totals(last12)
+    t12 = totals(last12, sess)
     longest = max(items, key=lambda r: r["distance_m"] or 0)
     has_km = any((r["distance_m"] or 0) > 0 for r in items)
     groups = [g for g, _ in GROUPS] if (is_run and not kind) else ["all"]
@@ -280,7 +349,7 @@ def sport(category, kind=None, area=None):
         d = r["start_local"].date()
         grp = GROUP_OF.get(r["kind"], "easy") if is_run else "all"
         pts.append({"date": d.isoformat(), "pace": round(pace, 1), "kmh": round(dist / 1000 / (secs / 3600), 2),
-                    "km": round(dist / 1000, 2), "hr": r["avg_hr"], "id": r["activity_id"], "name": r["name"],
+                    "km": round(dist / 1000, 2), "hr": r["avg_hr"], "id": r["activity_id"], "name": r["title"],
                     "group": grp, "kind": RUN_TYPE_LABEL.get(r["kind"], "") if is_run else ""})
         if r["avg_hr"] and dist >= 3000:
             eff.append((d, round((dist / secs * 60) / r["avg_hr"], 3)))
@@ -288,7 +357,10 @@ def sport(category, kind=None, area=None):
     pace_points = [(date.fromisoformat(p["date"]), p["pace"]) for p in pts if p["group"] != "race"]
     pace_line = rolling_median(pace_points, 42, 4)
 
-    # best efforts: every distance, best per month and per quarter
+    # pace at the same effort: zone 2, zones 3 to 4, zones 4 to 5 (from each run's own recording)
+    zone_pace = _zone_pace(items) if is_run else None
+
+    # best efforts: every distance, best per month
     ids = {r["activity_id"] for r in items}
     progress, pb_table = {}, []
     for dist in BEST_EFFORT_DISTANCES.get(category, []):
@@ -296,20 +368,15 @@ def sport(category, kind=None, area=None):
         .values("date", "seconds", "activity_id") if e["activity_id"] in ids]
         if not efforts:
             continue
-        by_m, by_q = {}, {}
+        by_m = {}
         for e in efforts:
             m = e["date"].replace(day=1)
-            q = date(e["date"].year, 3 * ((e["date"].month - 1) // 3) + 1, 1)
             if m not in by_m or e["seconds"] < by_m[m]["seconds"]:
                 by_m[m] = e
-            if q not in by_q or e["seconds"] < by_q[q]["seconds"]:
-                by_q[q] = e
         progress[str(dist)] = {
             "label": BEST_EFFORT_LABELS.get(dist, f"{dist} m"), "dist": dist,
             "month": [{"p": k.isoformat(), "secs": v["seconds"], "id": v["activity_id"]} for k, v in
                       sorted(by_m.items())],
-            "quarter": [{"p": k.isoformat(), "secs": v["seconds"], "id": v["activity_id"]} for k, v in
-                        sorted(by_q.items())],
         }
         best = min(efforts, key=lambda e: e["seconds"])
         recent = [e for e in efforts if e["date"] >= today - timedelta(days=90)]
@@ -328,6 +395,8 @@ def sport(category, kind=None, area=None):
     edges = _hist_edges(category)
     hist = [0] * (len(edges) - 1)
     for r in items:
+        if is_fragment(r):
+            continue
         km_ = (r["distance_m"] or 0) / 1000
         for i in range(len(edges) - 1):
             if edges[i] <= km_ < edges[i + 1]:
@@ -357,15 +426,50 @@ def sport(category, kind=None, area=None):
         "days_count": len({r["start_local"].date() for r in items}),
         "has_km": has_km,
         "monthly": monthly, "daily": daily,
-        "points": pts,
+        "points": pts, "zone_pace": zone_pace,
         "pace_line": [[d.isoformat(), v] for d, v in pace_line],
         "efficiency": {"points": [[d.isoformat(), v] for d, v in eff],
                        "line": [[d.isoformat(), v] for d, v in eff_line]},
         "progress": progress, "pbs": pb_table, "heatmap": heatmap,
         "hist": {"labels": hist_labels, "counts": hist}, "cadence": cadence, "mix": mix,
         "weather": weather_analysis(items, is_run, same_kind=bool(kind)),
+        "kind_rows": kind_table(kind, items) if is_run and kind else None,
         "where": where_places, "where_countries": where_countries,
     }
+
+
+# which kinds of run count for each band: the band each kind is run in
+BAND_KINDS = {"z2": {"easy", "recovery", "long", "steady", "progression"},
+              "z34": {"threshold", "intervals", "progression", "steady", "long"},
+              "z45": {"race", "intervals"}}
+
+
+def _zone_pace(items):
+    """Every run's average pace inside each heart rate band, with a 6-week median line per band."""
+    from .runtypes import RUN_TYPE_LABEL, ZONE_BANDS
+    infos = dict(Activity.objects.filter(activity_id__in=[r["activity_id"] for r in items])
+                 .values_list("activity_id", "run_type_info"))
+    floors = zone_floors()
+    bands = []
+    for key, label, lo, hi, _min in ZONE_BANDS:
+        pts = []
+        for r in items:
+            if is_fragment(r) or r["kind"] in ("warmup", "strides"):
+                continue
+            if r["kind"] and r["kind"] not in BAND_KINDS[key]:
+                continue  # a long run drifting into zone 4 is not race pace
+            zp = ((infos.get(r["activity_id"]) or {}).get("zone_pace") or {}).get(key)
+            if zp:
+                pts.append({"date": r["start_local"].date().isoformat(), "pace": zp["pace"], "min": round(zp["secs"] / 60),
+                            "hr": zp["hr"], "id": r["activity_id"], "name": r["title"],
+                            "kind": RUN_TYPE_LABEL.get(r["kind"], "")})
+        if not pts:
+            continue
+        line = rolling_median([(date.fromisoformat(p["date"]), p["pace"]) for p in pts], 42, 3)
+        rng = (f"{floors[lo]:.0f} to {floors[hi] - 1:.0f} bpm" if hi < 5 else f"{floors[lo]:.0f} bpm and up") if floors else ""
+        bands.append({"key": key, "label": label, "range": rng, "points": pts,
+                      "line": [[d.isoformat(), v] for d, v in line]})
+    return bands or None
 
 
 def weather_analysis(items, is_run, same_kind=False):
@@ -386,7 +490,7 @@ def weather_analysis(items, is_run, same_kind=False):
         if dist < 2000 or secs <= 0 or (is_run and r["kind"] in ("warmup", "strides")):
             continue
         hs, cost = heat_cost(w.temp_c, w.dew_point_c)
-        pts.append({"id": r["activity_id"], "date": r["start_local"].date().isoformat(), "name": r["name"],
+        pts.append({"id": r["activity_id"], "date": r["start_local"].date().isoformat(), "name": r["title"],
                     "temp": w.temp_c, "feels": w.feels_c, "dew": w.dew_point_c, "wind": w.wind_kmh,
                     "gust": w.gust_kmh, "head": w.headwind_kmh, "rain": w.precip_mm, "hum": w.humidity,
                     "pace": round(secs / (dist / 1000), 1), "hr": r["avg_hr"],
@@ -437,23 +541,6 @@ def personal():
     sports = sports_present()
     life = totals(items)
     first = items[0]["start_local"]
-    years = list(range(first.year, today.year + 1))
-    yidx = {y: i for i, y in enumerate(years)}
-    y_hours = {c: [0.0] * len(years) for c in sports}
-    y_km = {c: [0.0] * len(years) for c in sports}
-    y_count = {c: [0] * len(years) for c in sports}
-    for r in items:
-        i = yidx[r["start_local"].year]
-        y_hours[r["category"]][i] += t_of(r) / 3600
-        y_km[r["category"]][i] += (r["distance_m"] or 0) / 1000
-        y_count[r["category"]][i] += 1
-    year_rows = []
-    for y in reversed(years):
-        i = yidx[y]
-        year_rows.append({"year": y,
-                          "cells": [{"cat": c, "km": y_km[c][i], "hours": y_hours[c][i], "count": y_count[c][i]} for c
-                                    in sports],
-                          "hours": sum(y_hours[c][i] for c in sports), "count": sum(y_count[c][i] for c in sports)})
 
     # records
     records = []
@@ -516,21 +603,12 @@ def personal():
     # month by month and day by day, every month and day since the first activity
     monthly, daily = by_sport_series(items, sports, first.date(), today)
 
-    # time of year: hours per month, all years stacked into calendar months
-    month_hours = [0.0] * 12
-    for r in items:
-        month_hours[r["start_local"].month - 1] += t_of(r) / 3600
-
     return {
         "empty": False,
         "sports": sports,
         "life": life,
         "first": first,
         "days_active": len(active_days),
-        "years": [str(y) for y in years],
-        "yearly": {"hours": {c: [round(v, 1) for v in y_hours[c]] for c in sports},
-                   "km": {c: [round(v, 1) for v in y_km[c]] for c in sports if any(y_km[c])}},
-        "year_rows": year_rows,
         "records": records,
         "pbs": pbs,
         "streak": {"best": best_streak, "best_end": best_end, "current": cur_streak, "weeks": week_streak},
@@ -538,7 +616,6 @@ def personal():
         "floors": floors,
         "fitness_age": fa,
         "weights": [[d.isoformat(), round(kg, 2), bf] for d, kg, bf in weights if kg],
-        "month_hours": [round(v, 1) for v in month_hours],
         "monthly": monthly,
         "daily": daily,
     }
@@ -644,11 +721,15 @@ def place_page(area):
     first, last = items[0]["start_local"], items[-1]["start_local"]
     monthly, daily = by_sport_series(items, sports, first.date(), last.date())
     route_rows = (qs.exclude(route=None).order_by("-start_local")
-                  .values("activity_id", "category", "name", "start_local", "distance_m", "route",
+                  .values("activity_id", "category", "name", "type_key", "start_local", "distance_m", "route",
                           "run_type", "run_type_manual")[:400])
     from .runtypes import RUN_TYPE_LABEL
+    from .sports import activity_title
     routes = [
-        {"id": r["activity_id"], "cat": r["category"], "name": r["name"], "date": r["start_local"].date().isoformat(),
+        {"id": r["activity_id"], "cat": r["category"],
+         "name": activity_title(r["category"], r["run_type_manual"] or r["run_type"], r["type_key"], r["name"], "",
+                                r["distance_m"]),
+         "date": r["start_local"].date().isoformat(),
          "km": round((r["distance_m"] or 0) / 1000.0, 2),
          "kind": RUN_TYPE_LABEL.get(r["run_type_manual"] or r["run_type"], "") if r["category"] == "run" else "",
          "c": r["route"]} for r in route_rows]
@@ -762,6 +843,15 @@ def activity_detail(act):
     since = act.start_local - timedelta(days=90)
     peers = rows(
         Activity.objects.filter(category=act.category, start_local__gte=since, start_local__lt=act.start_local))
+    # warm-ups and strides would drag every average down; a run of a kind compares with that kind when it can
+    peers = [r for r in peers if not is_fragment(r) and r["kind"] not in ("warmup", "strides")]
+    same = [r for r in peers if act.category == "run" and r["kind"] == act.kind]
+    peer_kind = ""
+    if len(same) >= 3:
+        plural = {"race": "races and time trials", "threshold": "threshold runs", "intervals": "interval sessions",
+                  "progression": "progression runs", "long": "long runs", "steady": "steady runs", "easy": "easy runs",
+                  "recovery": "recovery runs"}
+        peers, peer_kind = same, plural.get(act.kind, "runs of this kind")
     compare = None
     if len(peers) >= 3:
         p_dist = [r["distance_m"] / 1000 for r in peers if r["distance_m"]]
@@ -769,7 +859,7 @@ def activity_detail(act):
                   r["distance_m"] and r["distance_m"] > 500 and t_of(r)]
         p_hr = [r["avg_hr"] for r in peers if r["avg_hr"]]
         compare = {
-            "n": len(peers),
+            "n": len(peers), "kind": peer_kind,
             "dist_avg": sum(p_dist) / len(p_dist) if p_dist else None,
             "pace_avg": statistics.median(p_pace) if p_pace else None,
             "hr_avg": sum(p_hr) / len(p_hr) if p_hr else None,
@@ -824,3 +914,162 @@ def _has(obj, rel):
         return getattr(obj, rel) is not None
     except Exception:
         return False
+
+
+# ---------- training log ----------
+LOG_WEEKS = 12
+KIND_SHORT = {"race": "Race", "threshold": "Threshold", "intervals": "Intervals", "progression": "Progression",
+              "long": "Long", "steady": "Steady", "easy": "Easy", "recovery": "Recovery", "strides": "Strides",
+              "warmup": "Warm-up"}
+
+
+def training_log(before=None, n_weeks=LOG_WEEKS):
+    """Week by week, day by day: every session as a cell, and per week the running distance, the longest run
+    and its share of the week, and how the running time splits between easy (zones 1 and 2) and hard (3 to 5)."""
+    from .runtypes import GROUP_OF
+    today = date.today()
+    first_act = Activity.objects.order_by("start_local").values_list("start_local", flat=True).first()
+    if not first_act:
+        return {"empty": True}
+    first_week = week_start(first_act)
+    top = min(week_start(before) - timedelta(weeks=1), week_start(today)) if before else week_start(today)
+    weeks = [top - timedelta(weeks=i) for i in range(n_weeks) if top - timedelta(weeks=i) >= first_week]
+    if not weeks:
+        return {"empty": True}
+    lo = weeks[-1] - timedelta(weeks=1)  # one week more, for the change against the week before
+    items = rows(Activity.objects.filter(start_local__date__gte=lo, start_local__date__lt=top + timedelta(days=7)))
+    zones = {a: z for a, *z in Activity.objects.filter(start_local__date__gte=lo, category="run").values_list(
+        "activity_id", "hr_z1", "hr_z2", "hr_z3", "hr_z4", "hr_z5")}
+    extras = defaultdict(list)
+    for r in items:
+        if r["session_of"]:
+            extras[r["session_of"]].append(r)
+    by_week = defaultdict(list)
+    for r in items:
+        by_week[week_start(r["start_local"])].append(r)
+    from . import plan as P
+    planned = P.by_day(weeks[-1], top + timedelta(days=6))
+
+    def run_km(ws):
+        return sum((r["distance_m"] or 0) for r in by_week.get(ws, []) if r["category"] == "run") / 1000.0
+
+    out = []
+    for ws in weeks:
+        acts = by_week.get(ws, [])
+        days = []
+        for i in range(7):
+            d = ws + timedelta(days=i)
+            cells = []
+            for r in acts:
+                if r["start_local"].date() != d or (r["session_of"] and any(
+                        x["activity_id"] == r["session_of"] for x in acts)):
+                    continue
+                ex = extras.get(r["activity_id"], [])
+                km = ((r["distance_m"] or 0) + sum((x["distance_m"] or 0) for x in ex)) / 1000.0
+                is_run = r["category"] == "run"
+                cells.append({"id": r["activity_id"], "cat": r["category"], "title": r["title"],
+                              "kind": r["kind"] if is_run else "", "short": KIND_SHORT.get(r["kind"], "Run") if is_run else "",
+                              "group": GROUP_OF.get(r["kind"], "easy") if is_run else "",
+                              "km": km, "min": round((t_of(r) + sum(t_of(x) for x in ex)) / 60),
+                              "extra_km": sum((x["distance_m"] or 0) for x in ex) / 1000.0,
+                              "time": r["start_local"].strftime("%H:%M")})
+            cells.sort(key=lambda c: c["cat"] != "run")  # runs first, other sports as small tags under them
+            done = [{"category": c["cat"], "km": c["km"], "kind": c["kind"], "id": c["id"]} for c in cells]
+            plan_cells = []
+            for ps in planned.get(d, []):
+                st = P.status(ps, done, today)
+                plan_cells.append({"label": ps.title or P.label(ps.kind), "kind": P.label(ps.kind), "km": ps.distance_km,
+                                   "min": ps.duration_min, "pace": ps.pace, "status": st,
+                                   "status_label": P.STATUS_LABEL[st], "desc": ps.description})
+            days.append({"date": d, "cells": cells, "plan": plan_cells, "future": d > today, "today": d == today})
+        runs = [r for r in acts if r["category"] == "run"]
+        km = run_km(ws)
+        longest = max((r for r in runs if not r["session_of"]), key=lambda r: r["distance_m"] or 0, default=None)
+        easy = hard = 0.0
+        for r in runs:
+            z = zones.get(r["activity_id"])
+            if z and any(z):
+                easy += (z[0] or 0) + (z[1] or 0)
+                hard += sum(v or 0 for v in z[2:])
+        prev = run_km(ws - timedelta(weeks=1))
+        out.append({
+            "start": ws, "end": ws + timedelta(days=6), "days": days, "current": ws == week_start(today),
+            "run_km": km, "runs": sum(1 for r in runs if not r["session_of"]),
+            "secs": sum(t_of(r) for r in acts),
+            "long_km": (longest["distance_m"] or 0) / 1000.0 if longest else 0, "long_id": longest["activity_id"] if longest else None,
+            "long_share": round(100 * (longest["distance_m"] or 0) / 1000.0 / km) if longest and km else None,
+            "easy_share": round(100 * easy / (easy + hard)) if easy + hard > 0 else None,
+            "change": round(100 * (km - prev) / prev) if prev >= 3 and ws < week_start(today) else None,
+            "plan_km": sum(ps.distance_km or 0 for i in range(7) for ps in planned.get(ws + timedelta(days=i), [])
+                           if ps.kind in P.RUN_KINDS),
+        })
+    more = weeks[-1] > first_week
+    # a plan can run past today: show the weeks ahead too, on the first page
+    ahead = []
+    if not before:
+        from .models import PlanSession
+        last_plan = PlanSession.objects.order_by("-date").values_list("date", flat=True).first()
+        if last_plan and last_plan > top + timedelta(days=6):
+            future = P.by_day(top + timedelta(days=7), last_plan)
+            ws = top + timedelta(weeks=1)
+            while ws <= last_plan and len(ahead) < 8:
+                ahead.append({"start": ws, "end": ws + timedelta(days=6), "future": True, "days": [
+                    {"date": ws + timedelta(days=i), "cells": [], "future": True, "today": False,
+                     "plan": [{"label": ps.title or P.label(ps.kind), "kind": P.label(ps.kind), "km": ps.distance_km,
+                               "min": ps.duration_min, "pace": ps.pace, "status": "planned", "status_label": "Planned",
+                               "desc": ps.description} for ps in future.get(ws + timedelta(days=i), [])]}
+                    for i in range(7)],
+                    "plan_km": sum(ps.distance_km or 0 for v in future.values() for ps in v
+                                   if ws <= ps.date <= ws + timedelta(days=6) and ps.kind in P.RUN_KINDS)})
+                ws += timedelta(weeks=1)
+        out = list(reversed(ahead)) + out
+    return {"empty": False, "weeks": out, "older": weeks[-1].isoformat() if more else None,
+            "newer": (weeks[0] + timedelta(weeks=n_weeks + 1)).isoformat() if before and weeks[0] < week_start(today) else None,
+            "day_names": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+
+
+# ---------- one kind of run: the table that matters for that kind ----------
+def kind_table(kind, items):
+    """Every session of one kind, newest first, with the columns that tell that kind's story."""
+    from .racing import vdot
+    ids = [r["activity_id"] for r in items]
+    extra = {a: (info or {}, el, sess) for a, info, el, sess in Activity.objects.filter(pk__in=ids).values_list(
+        "activity_id", "run_type_info", "elapsed_s", "session_of")}
+    from .models import Weather
+    wx = {w.activity_id: w for w in Weather.objects.filter(activity_id__in=ids, error="")}
+    parents = {a.pk: a for a in Activity.objects.filter(pk__in=[v[2] for v in extra.values() if v[2]])}
+    out = []
+    for r in reversed(items):
+        info, elapsed, sess = extra.get(r["activity_id"], ({}, None, None))
+        secs = t_of(r)
+        km = (r["distance_m"] or 0) / 1000.0
+        row = {"id": r["activity_id"], "date": r["start_local"], "title": r["title"], "km": km, "secs": secs,
+               "pace": secs / km if km else None, "hr": r["avg_hr"]}
+        blocks = info.get("blocks") or []
+        if kind == "race":
+            clock = elapsed or secs
+            w = wx.get(r["activity_id"])
+            row.update({"secs": clock, "pace": clock / km if km else None, "vdot": vdot(r["distance_m"], clock),
+                        "temp": w.temp_c if w else None, "wind": w.wind_kmh if w else None})
+        elif kind in ("threshold", "intervals", "progression"):
+            work = sum(b["dur"] for b in blocks)
+            dist = sum(b["dist"] for b in blocks)
+            hrs = [b["hr"] for b in blocks if b.get("hr")]
+            row.update({"reps": len(blocks), "rep_min": work / len(blocks) / 60 if blocks else None,
+                        "work_min": work / 60 if blocks else None,
+                        "rep_pace": work / (dist / 1000) if dist else None,
+                        "rep_hr": sum(hrs) / len(hrs) if hrs else None})
+        elif kind == "long":
+            fin = [b for b in blocks if b.get("start") is not None]
+            fd = sum(b["dist"] for b in fin)
+            row.update({"finish_km": fd / 1000 if fd else None,
+                        "finish_pace": sum(b["dur"] for b in fin) / (fd / 1000) if fd else None,
+                        "decoupling": info.get("decoupling")})
+        elif kind in ("easy", "recovery", "steady"):
+            z2 = (info.get("zone_pace") or {}).get("z2")
+            row.update({"z2_pace": z2["pace"] if z2 else None, "decoupling": info.get("decoupling")})
+        else:  # warm-ups, cool-downs, strides
+            p = parents.get(sess)
+            row.update({"parent": p.title if p else "", "parent_id": p.pk if p else None})
+        out.append(row)
+    return out

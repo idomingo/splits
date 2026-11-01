@@ -1,0 +1,21 @@
+[project]
+name = "splits"
+version = "0.3.0"
+description = "A personal training dashboard built on Garmin's official Personal API."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "Django>=5.2,<5.3",
+    "requests>=2.32",
+    "fitdecode>=0.10",
+]
+
+[dependency-groups]
+# only for devtools/mock_garmin.py (testing without a Garmin key)
+dev = ["fit-tool>=0.9"]
+
+[tool.uv]
+# an app, not a library: uv only manages the environment, nothing is built or installed as a package
+package = false
+default-groups = []

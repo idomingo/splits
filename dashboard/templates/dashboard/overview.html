@@ -39,6 +39,20 @@
 {% endwith %}
 
 
+{% if data.next_race %}{% with nr=data.next_race %}
+<a class="next-race" href="{% url 'race' nr.race.pk %}">
+  <span class="race-when"><strong>{% if nr.days == 0 %}Today{% else %}{{ nr.days }}{% endif %}</strong>{% if nr.days %}day{{ nr.days|pluralize }}{% endif %}</span>
+  <span class="race-body">
+    <span class="race-meta">Next race</span>
+    <span class="race-name">{{ nr.race.name }}</span>
+    <span class="race-meta">{{ nr.race.date|date:"D j M" }}{% if nr.race.location %}, {{ nr.race.location }}{% endif %}, {{ nr.race.distance_km|kmv:2 }} km</span>
+  </span>
+  <span class="race-stats">
+    {% if nr.race.goal_s %}<span><em>Goal</em>{{ nr.race.goal_s|dur }}</span>{% endif %}
+    {% if nr.pred %}<span><em>VDOT</em>{{ nr.pred.vdot_time|dur }}</span><span><em>Riegel</em>{{ nr.pred.riegel_time|dur }}</span>{% endif %}
+  </span>
+</a>
+{% endwith %}{% endif %}
 <div class="grid grid-2">
   <section class="panel span-2">
     <div class="panel-head">
@@ -52,8 +66,16 @@
   </section>
   <section class="panel">
     <div class="panel-head"><h2>Training load</h2></div>
-    <p class="panel-note">Last 7 days against your last 6 weeks. When the 7-day line runs well above, you are building; well below, you are resting.</p>
-    <div class="chart" id="chart-load" style="height:240px"></div>
+    {% with n=data.load.now %}
+    <p class="load-now load-{{ n.state|default:'none' }}">{% if n.ratio is not None %}<strong>{{ n.ratio|num:2 }}</strong> {% endif %}{{ n.text }}</p>
+    <dl class="load-facts">
+      <div><dt>Last 7 days</dt><dd>{{ n.acute|num }}</dd></div>
+      <div><dt>Usual week</dt><dd>{{ n.usual|num }}</dd></div>
+      {% if n.run_km_usual %}<div><dt>Running, 7 days</dt><dd>{{ n.run_km7|num:1 }} km{% if n.run_change is not None %} <span>{{ n.run_change|signed }}% on your usual {{ n.run_km_usual|num:1 }} km</span>{% endif %}</dd></div>{% endif %}
+    </dl>
+    {% endwith %}
+    <div class="chart" id="chart-load" style="height:300px"></div>
+    <p class="panel-note">Load is Garmin's training load for each activity, from heart rate. The usual week is your average week over the last 28 days. The ratio of the two (bottom) between 0.8 and 1.3 is a steady build; above 1.5 is a jump that raises the risk of injury.</p>
   </section>
   <section class="panel">
     <div class="panel-head"><h2>Health now</h2><a class="link" href="{% url 'health' %}">All health data</a></div>
@@ -71,4 +93,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block data %}{% if not data.empty %}{{ data|json_script:"page-data" }}{% endif %}{% endblock %}
+{% block data %}{% if not data.empty %}{{ json|json_script:"page-data" }}{% endif %}{% endblock %}

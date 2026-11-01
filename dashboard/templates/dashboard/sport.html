@@ -20,7 +20,7 @@
     </form>
     {% endif %}
   </div>
-  {% if not data.empty %}<p class="page-sub">{{ data.totals.all.count }} {% if kind %}sessions{% else %}activities{% endif %} since {{ data.first_date|date:"F Y" }}</p>{% endif %}
+  {% if not data.empty %}<p class="page-sub">{{ data.totals.all.count }} {% if kind or category == "run" %}sessions{% else %}activities{% endif %} since {{ data.first_date|date:"F Y" }}</p>{% endif %}
   {% if kind %}<p class="kind-about">{% include "dashboard/partials/kind_about.html" with kind=kind %}</p>{% endif %}
 </header>
 {% if data.empty %}
@@ -44,6 +44,44 @@
   {% endif %}
 </div>
 {% endwith %}
+
+{% if data.kind_rows %}
+<section class="panel kind-table-panel">
+  <div class="panel-head"><h2>Every {% if kind == "race" %}race and time trial{% elif kind == "long" %}long run{% elif kind == "threshold" %}threshold session{% elif kind == "intervals" %}interval session{% elif kind == "progression" %}progression run{% elif kind == "warmup" %}warm-up and cool-down{% elif kind == "strides" %}set of strides{% else %}{{ label|lower }} run{% endif %}</h2><span class="panel-note">newest first</span></div>
+  <div class="table-scroll">
+  <table class="table kind-table">
+    <thead><tr>
+      <th scope="col">Date</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th>
+      {% if kind == "race" %}<th scope="col" class="num">VDOT</th><th scope="col" class="num">Conditions</th>
+      {% elif kind == "threshold" or kind == "intervals" or kind == "progression" %}<th scope="col" class="num">Fast blocks</th><th scope="col" class="num">Fast time</th><th scope="col" class="num">Block pace</th><th scope="col" class="num">Block HR</th>
+      {% elif kind == "long" %}<th scope="col" class="num">Fast running</th><th scope="col" class="num">Decoupling</th>
+      {% elif kind == "easy" or kind == "recovery" or kind == "steady" %}<th scope="col" class="num">Pace in zone 2</th><th scope="col" class="num">Decoupling</th>
+      {% else %}<th scope="col">With</th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for r in data.kind_rows %}
+      <tr>
+        <th scope="row"><a href="{% url 'activity' r.id %}">{{ r.date|date:"D j M Y" }}</a><span class="sub">{{ r.title }}</span></th>
+        <td class="num">{{ r.km|kmv:2 }} km</td><td class="num">{{ r.secs|dur }}</td><td class="num">{{ r.pace|pace }}</td><td class="num">{{ r.hr|num }}</td>
+        {% if kind == "race" %}<td class="num">{{ r.vdot|num:1 }}</td><td class="num">{% if r.temp is not None %}{{ r.temp|num }}°C, {{ r.wind|num }} km/h{% else %}-{% endif %}</td>
+        {% elif kind == "threshold" or kind == "intervals" or kind == "progression" %}<td class="num">{% if r.reps %}{{ r.reps }} × {{ r.rep_min|num:1 }} min{% else %}-{% endif %}</td><td class="num">{% if r.work_min %}{{ r.work_min|num }} min{% else %}-{% endif %}</td><td class="num">{{ r.rep_pace|pace }}</td><td class="num">{{ r.rep_hr|num }}</td>
+        {% elif kind == "long" %}<td class="num">{% if r.finish_km %}{{ r.finish_km|kmv:1 }} km at {{ r.finish_pace|pace }}{% else %}-{% endif %}</td><td class="num">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
+        {% elif kind == "easy" or kind == "recovery" or kind == "steady" %}<td class="num">{{ r.z2_pace|pace }}</td><td class="num">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
+        {% else %}<td>{% if r.parent_id %}<a href="{% url 'activity' r.parent_id %}">{{ r.parent }}</a>{% else %}on its own{% endif %}</td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="panel-note">{% if kind == "race" %}Time is clock time. VDOT is Jack Daniels' measure of the fitness a result shows: a higher VDOT is a better performance, whatever the distance, so it compares a 5 km with a 10 km.{% elif kind == "long" %}Decoupling is how much heart rate rose for the same pace from the first half to the second, warm-up and fast finish left out: under 5% means the pace sat well within your aerobic endurance.{% elif kind == "threshold" or kind == "intervals" or kind == "progression" %}Fast blocks are stretches at least 18% quicker than your easy pace, found in the pace trace.{% elif kind == "easy" or kind == "recovery" or kind == "steady" %}Pace in zone 2 is the average pace while heart rate was in zone 2, first 3 minutes left out. Decoupling: heart rate rise for the same pace, first half to second.{% endif %}</p>
+</section>
+{% if kind == "race" and data.kind_rows|length > 1 %}
+<section class="panel">
+  <div class="panel-head"><h2>Race fitness over time</h2><span class="panel-note">VDOT of every race and time trial</span></div>
+  <div class="chart" id="chart-vdot" style="height:240px"></div>
+</section>
+{% endif %}
+{% endif %}
 
 {% if data.mix %}
 <section class="panel mix-panel">
@@ -88,27 +126,31 @@
     <div class="chart" id="chart-daily" style="height:300px"></div>
   </section>
   {% if data.points %}
+  {% if data.zone_pace %}
+  <section class="panel span-2">
+    <div class="panel-head"><h2>Pace at the same effort</h2><span class="panel-note">{% for b in data.zone_pace %}{{ b.label }}: {{ b.range }}{% if not forloop.last %} · {% endif %}{% endfor %}</span></div>
+    <p class="panel-note">Each dot is one run's average pace while your heart rate was in that band (your own zones from Garmin): zone 2 from easy, recovery, steady and long runs; zones 3 to 4 from tempo, threshold, steady and long runs; zones 4 to 5 from races and intervals. The line is the 6-week median. A line that goes up means you run faster at the same effort. The first 3 minutes of each run are left out, because heart rate lags behind pace at the start. Click a dot to open the run.</p>
+    <div class="chart" id="chart-pace" style="height:300px"></div>
+  </section>
+  {% elif category != "run" %}
   <section class="panel">
     <div class="panel-head"><h2>{% if pace_mode %}Pace{% else %}Speed{% endif %} over time</h2></div>
-    <p class="panel-note">Every session with the 6-week median line{% if category == "run" and not kind %}. Races and time trials are left out of the line{% endif %}. Click a dot to open it.</p>
+    <p class="panel-note">Every session with the 6-week median line. Click a dot to open it.</p>
     <div class="chart" id="chart-pace" style="height:270px"></div>
   </section>
-  <section class="panel">
+  {% endif %}
+  <section class="panel{% if category == "run" %} span-2{% endif %}">
     <div class="panel-head"><h2>Aerobic efficiency</h2></div>
     <p class="panel-note">Metres covered per heartbeat on sessions of 3 km or more. Going up means you move faster for the same effort.</p>
     <div class="chart" id="chart-eff" style="height:270px"></div>
   </section>
   {% endif %}
-  {% if data.pbs %}
+  {% if data.pbs and not kind or data.pbs and kind == "race" %}
   <section class="panel span-2">
     <div class="panel-head">
       <h2>Best efforts</h2>
-      <div class="seg" role="group" aria-label="Period">
-        <button type="button" class="seg-btn is-on" data-period="month">Best per month</button>
-        <button type="button" class="seg-btn" data-period="quarter">Best per quarter</button>
-      </div>
     </div>
-    <p class="panel-note">Fastest time over each distance inside any {% if kind %}{{ label|lower }} session{% else %}activity{% endif %}{% if area %} in {{ area.name }}{% endif %}. The table has your best ever; each small chart has the fastest of every month or quarter. Up is faster.</p>
+    <p class="panel-note">Fastest time over each distance inside any {% if kind %}{{ label|lower }} session{% else %}activity{% endif %}{% if area %} in {{ area.name }}{% endif %}. The table has your best ever; each small chart has the fastest of every month. Up is faster.</p>
     <div class="pb-grid">
       <div class="table-scroll">
       <table class="table">
@@ -160,6 +202,7 @@
   </section>
   {% endwith %}{% endif %}
 
+  {% if not kind %}
   <section class="panel">
     <div class="panel-head"><h2>When you go out</h2></div>
     <div class="chart" id="chart-when" style="height:250px"></div>
@@ -168,7 +211,8 @@
     <div class="panel-head"><h2>How far you go</h2></div>
     <div class="chart" id="chart-hist" style="height:250px"></div>
   </section>
-  {% if data.cadence %}
+  {% endif %}
+  {% if data.cadence and not kind %}
   <section class="panel span-2">
     <div class="panel-head"><h2>Cadence by month</h2><span class="panel-note">{% if category == "cycle" %}Pedal revolutions{% else %}Steps{% endif %} per minute, monthly average</span></div>
     <div class="chart" id="chart-cadence" style="height:220px"></div>

@@ -2,7 +2,7 @@
 
 Use a separate database so demo data never mixes with yours:
     DB_PATH=data/demo.sqlite3 python manage.py seed_demo
-(run.sh demo does this for you)."""
+(uv run manage.py start --demo does this for you)."""
 import sys
 
 from django.conf import settings
@@ -73,4 +73,33 @@ class Command(BaseCommand):
                                  "latitude": lat, "longitude": lon})
             data["_source"] = "demo"
             Weather.objects.update_or_create(activity=act, defaults=dict(build(act, data), lat=lat, lon=lon))
+        self.add_race_and_plan()
         self.stdout.write(self.style.SUCCESS(f"Demo data ready in {db_name}"))
+
+    def add_race_and_plan(self):
+        """A half marathon coming up and the plan towards it: four weeks done, three to go."""
+        from datetime import date, timedelta
+        from dashboard.models import Race
+        from dashboard.plan import import_plan
+        today = date.today()
+        race_day = today + timedelta(days=(6 - today.weekday()) % 7 + 21)
+        Race.objects.create(name="Winter Half Marathon", location="Amsterdam", date=race_day, distance_m=21097.5,
+                            goal_s=1 * 3600 + 39 * 60)
+        week = [(0, "easy", "Easy run", 8, "5:35-5:50", ""), (1, "intervals", "8 x 600 m", 9, "4:10",
+                 "2 km warm-up; 8 x 600 m, 300 m jog; cool-down"), (2, "strength", "Strength", None, "", ""),
+                (3, "threshold", "Tempo", 11, "4:45", "2 km warm-up; tempo; 1.5 km cool-down"),
+                (4, "easy", "Easy run", 7, "5:40", ""), (5, "rest", "Rest", None, "", ""),
+                (6, "long", "Long run", 18, "5:40-5:55", "Last 3 km at half marathon pace")]
+        rows = ["date,kind,title,distance_km,duration_min,pace,description"]
+        start = race_day - timedelta(days=race_day.weekday()) - timedelta(weeks=6)
+        for w in range(7):
+            for day, kind, title, km, pace, desc in week:
+                d = start + timedelta(weeks=w, days=day)
+                if d > race_day:
+                    continue
+                if d == race_day:
+                    kind, title, km, pace, desc = "race", "Winter Half Marathon", 21.1, "4:42", ""
+                elif w == 6:
+                    km = round(km * 0.6, 1) if km else km  # race week: lighter
+                rows.append(f'{d},{kind},{title},{km if km else ""},,{pace},"{desc}"')
+        import_plan("\n".join(rows), replace_all=True)
