@@ -20,9 +20,17 @@ each version is a git tag.
 - A **No data before** label when there was no race or best effort over 3 km in the
   90 days before a race to predict from.
 
+### Changed
+
+- **Wide tables on a phone** are now shown as a card per row, with a label on each
+  value, so nothing scrolls sideways: past races, the training plan, course runs,
+  the tables for each kind of run, places, and an activity's out and back and fast
+  blocks. On a wider screen they are still tables.
+
 ### Fixed
 
 - The race date picker closed when moving to the previous or next month.
+- The CSV example on the Training plan page ran off the side of a phone screen.
 
 ## [1.0.0] - 2026-11-01
 
