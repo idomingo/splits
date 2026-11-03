@@ -10,8 +10,8 @@
 </header>
 
 {% if d.result %}{% with x=d.result %}
-<section class="panel race-result">
-  <div class="panel-head"><h2>Result</h2><a class="link" href="{% url 'activity' x.id %}">Open the run</a></div>
+<section class="panel race-result{% if x.verdict %} res-{{ x.verdict }}{% endif %}">
+  <div class="panel-head"><h2>Result{% if x.verdict %} <span class="res-badge res-{{ x.verdict }}"><b aria-hidden="true">{{ x.verdict_icon }}</b>{{ x.verdict_text }}</span>{% elif not d.pred %} <span class="res-badge res-none">No data before this race to predict from</span>{% endif %}{% if x.goal_hit is not None %} <span class="res-badge {% if x.goal_hit %}res-better{% else %}res-worse{% endif %}"><b aria-hidden="true">{% if x.goal_hit %}&#10004;{% else %}&#10006;{% endif %}</b>Goal {% if x.goal_hit %}reached{% else %}missed{% endif %}</span>{% endif %}</h2><a class="link" href="{% url 'activity' x.id %}">Open the run</a></div>
   <dl class="pred-grid">
     <div><dt>Your time</dt><dd>{{ x.secs|dur }}</dd><span>{{ x.pace|pace }} /km, VDOT {{ x.vdot|num:1 }}</span></div>
     {% if x.vs_goal is not None %}<div><dt>Against your goal</dt><dd>{% if x.vs_goal <= 0 %}-{{ x.vs_goal|neg|dur }}{% else %}+{{ x.vs_goal|dur }}{% endif %}</dd><span>goal {{ d.goal|dur }}</span></div>{% endif %}

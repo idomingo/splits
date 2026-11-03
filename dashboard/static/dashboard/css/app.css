@@ -974,3 +974,20 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   .log .log-sum:nth-last-child(2) { order: 0; }
   .log tr:not(.is-ahead) .log-sum:nth-last-child(2)::before { content: "Longest run"; font-size: 12px; color: var(--muted); }
 }
+
+/* past races against their predictions: the words and the ticks carry the meaning, so it reads the same
+   without colour; the colours (blue, grey, orange) are the pair most colour-blind people can still tell apart */
+.res-better { --res: var(--z2); }
+.res-mixed { --res: var(--muted); }
+.res-worse { --res: var(--z4); }
+.race-result.res-better, .race-result.res-mixed, .race-result.res-worse { border-left-color: var(--res); }
+.race-result.res-mixed { border-left-style: dashed; }
+.res-badge { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; vertical-align: 3px; white-space: nowrap; color: var(--ink);
+  background: color-mix(in srgb, var(--res) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--res); }
+td .res-badge { margin-left: 0; vertical-align: 0; }
+.res-badge b { font-weight: 700; letter-spacing: -2px; }
+.res-worse.res-badge { box-shadow: inset 0 0 0 1.5px var(--res); border-radius: 4px; }
+.res-none { --res: var(--line-strong); font-weight: 500; color: var(--ink-2); }
+.goal-mark { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.goal-mark b { margin-right: 4px; color: var(--res); }

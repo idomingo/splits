@@ -191,4 +191,16 @@ def race_view(race, today=None):
                              "vs_vdot": secs - pred["vdot_time"] if pred else None,
                              "vs_riegel": secs - pred["riegel_time"] if pred else None,
                              "vs_goal": secs - goal if goal else None}
+            r = out["result"]
+            if pred:
+                # faster than both predictions, than one, or slower than both
+                beat = (r["vs_vdot"] < 0) + (r["vs_riegel"] < 0)
+                r["verdict"] = ("better", "mixed", "worse")[2 - beat]
+                r["verdict_text"] = ("Faster than both predictions", "Faster than one of the predictions",
+                                     "Slower than both predictions")[2 - beat]
+                r["verdict_short"] = ("Faster", "Faster than one", "Slower")[2 - beat]
+                r["verdict_icon"] = ("\u2714\u2714", "\u2714", "\u2716")[2 - beat]  # two ticks, one tick, a cross
+            if goal:
+                r["goal_hit"] = secs <= goal
+                r["goal_diff"] = abs(secs - goal)
     return out
