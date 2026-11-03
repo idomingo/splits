@@ -3,6 +3,19 @@
 All notable changes to Splits. Versions follow [semantic versioning](https://semver.org);
 each version is a git tag.
 
+## [1.0.2] - 2026-11-03
+
+### Fixed
+
+- The Training plan table was far wider than a laptop screen, because long
+  descriptions did not wrap. They now wrap and the table fits.
+- The training log no longer scrolls sideways in a narrow window: it shows the full
+  table when there is room and the week blocks from the phone layout when there is
+  not. Long session names stay inside their day.
+- Past races, the tables for each kind of run, course runs, places, and an
+  activity's out and back and fast blocks turn into cards whenever their panel is
+  too narrow for the table, in a narrow window as well as on a phone.
+
 ## [1.0.1] - 2026-11-03
 
 ### Added
@@ -181,6 +194,7 @@ The first public version.
 - Demo data (`run.sh demo`) and a mock Garmin API for testing without a key.
 - Setup and run scripts for macOS, MIT license.
 
+[1.0.2]: https://github.com/idomingo/splits/compare/1.0.1...1.0.2
 [1.0.1]: https://github.com/idomingo/splits/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/idomingo/splits/compare/0.2.0...1.0.0
 [0.2.0]: https://github.com/idomingo/splits/compare/0.1.0...0.2.0
