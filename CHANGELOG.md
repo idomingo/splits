@@ -3,6 +3,27 @@
 All notable changes to Splits. Versions follow [semantic versioning](https://semver.org);
 each version is a git tag.
 
+## [1.0.1] - 2026-11-03
+
+### Added
+
+- **Past races**: a race you have already run can be added like any other. Its
+  prediction uses only the races and best efforts of the 90 days before it, and the
+  race page shows your result against your goal and both predictions.
+- The Races page has a **Past races** table: your time, what VDOT and Riegel
+  predicted, and your goal.
+- Each past race is marked **✔✔ Faster than both**, **✔ Faster than one** or
+  **✖ Slower than both** predictions, and the goal shows **✔ under** or **✖ over**
+  with the difference. Ticks, crosses and words carry the meaning, so it reads the
+  same without colour; the colours are blue, grey and orange, which most colour-blind
+  people can tell apart.
+- A **No data before** label when there was no race or best effort over 3 km in the
+  90 days before a race to predict from.
+
+### Fixed
+
+- The race date picker closed when moving to the previous or next month.
+
 ## [1.0.0] - 2026-11-01
 
 A big round for runners: a training log, a training plan, races with predicted
@@ -152,6 +173,7 @@ The first public version.
 - Demo data (`run.sh demo`) and a mock Garmin API for testing without a key.
 - Setup and run scripts for macOS, MIT license.
 
-[1.0.0]: https://github.com/idomingo/splits/compare/v0.2.0...v1.0.0
-[0.2.0]: https://github.com/idomingo/splits/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/idomingo/splits/releases/tag/v0.1.0
+[1.0.1]: https://github.com/idomingo/splits/compare/1.0.0...1.0.1
+[1.0.0]: https://github.com/idomingo/splits/compare/0.2.0...1.0.0
+[0.2.0]: https://github.com/idomingo/splits/compare/0.1.0...0.2.0
+[0.1.0]: https://github.com/idomingo/splits/releases/tag/0.1.0
