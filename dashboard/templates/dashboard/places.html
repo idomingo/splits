@@ -30,7 +30,7 @@
     <span class="panel-note">{{ c.count }} activit{{ c.count|pluralize:"y,ies" }}{% if c.km >= 1 %}, {{ c.km|kmv:0 }} km{% endif %}, {{ c.hours|hours:0 }} h</span>
   </div>
   <div class="table-scroll">
-  <table class="table places-table table-stack">
+  <table class="table places-table table-stack-md">
     <thead><tr><th scope="col">Place</th><th scope="col" class="num">Activities</th><th scope="col">Sports</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
     <tbody>
     {% for p in c.places %}
