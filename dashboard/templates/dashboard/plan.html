@@ -24,17 +24,17 @@
 <section class="panel">
   <div class="panel-head"><h2>Four weeks back, two weeks ahead</h2></div>
   <div class="table-scroll table-scroll-full">
-  <table class="table plan-table">
+  <table class="table plan-table table-stack">
     <thead><tr><th scope="col">Day</th><th scope="col">Planned</th><th scope="col" class="num">Distance</th><th scope="col">Pace</th><th scope="col">Done</th><th scope="col">Status</th></tr></thead>
     <tbody>
     {% for x in data.days %}
       <tr class="{% if x.today %}is-today{% endif %}{% if not x.past and not x.today %} is-future{% endif %}">
         <th scope="row">{{ x.s.date|date:"D j M" }}</th>
-        <td><strong>{{ x.s.title|default:x.label }}</strong>{% if x.s.title and x.s.title != x.label %}<span class="sub">{{ x.label }}</span>{% endif %}{% if x.s.description %}<span class="sub">{{ x.s.description }}</span>{% endif %}</td>
-        <td class="num">{% if x.s.distance_km %}{{ x.s.distance_km|kmv:1 }} km{% elif x.s.duration_min %}{{ x.s.duration_min|num }} min{% else %}-{% endif %}</td>
-        <td>{{ x.s.pace|default:"-" }}</td>
-        <td>{% for a in x.done %}<a href="{% url 'activity' a.id %}">{{ a.title }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</td>
-        <td><span class="plan-status st-{{ x.status }}">{{ x.status_label }}</span></td>
+        <td class="stack-wide"><strong>{{ x.s.title|default:x.label }}</strong>{% if x.s.title and x.s.title != x.label %}<span class="sub">{{ x.label }}</span>{% endif %}{% if x.s.description %}<span class="sub">{{ x.s.description }}</span>{% endif %}</td>
+        <td class="num" data-label="Distance">{% if x.s.distance_km %}{{ x.s.distance_km|kmv:1 }} km{% elif x.s.duration_min %}{{ x.s.duration_min|num }} min{% else %}-{% endif %}</td>
+        <td data-label="Pace">{{ x.s.pace|default:"-" }}</td>
+        <td class="stack-wide" data-label="Done">{% for a in x.done %}<a href="{% url 'activity' a.id %}">{{ a.title }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</td>
+        <td class="stack-status"><span class="plan-status st-{{ x.status }}">{{ x.status_label }}</span></td>
       </tr>
     {% endfor %}
     </tbody>

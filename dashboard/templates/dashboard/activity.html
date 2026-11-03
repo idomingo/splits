@@ -64,11 +64,11 @@
   </div>
   {% if d.blocks %}
   <div class="table-scroll blocks">
-  <table class="table">
+  <table class="table table-stack">
     <thead><tr><th scope="col">Fast block</th><th scope="col" class="num">From</th><th scope="col" class="num">Time</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th></tr></thead>
     <tbody>
     {% for b in d.blocks %}
-      <tr><th scope="row">{{ forloop.counter }}</th><td class="num">{{ b.at|kmv:2 }} km</td><td class="num">{{ b.dur|dur }}</td><td class="num">{{ b.dist|km }} km</td><td class="num">{{ b.pace|pace }} /km</td><td class="num">{{ b.hr|num }}</td></tr>
+      <tr><th scope="row"><span class="stack-only">Fast block </span>{{ forloop.counter }}</th><td class="num" data-label="From">{{ b.at|kmv:2 }} km</td><td class="num" data-label="Time">{{ b.dur|dur }}</td><td class="num" data-label="Distance">{{ b.dist|km }} km</td><td class="num" data-label="Pace">{{ b.pace|pace }} /km</td><td class="num" data-label="Avg HR">{{ b.hr|num }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -189,10 +189,10 @@
   <section class="panel{% if not an.decoupling %} span-2{% endif %}">
     <div class="panel-head"><h2>{% if an.shape.kind == "out_and_back" %}Out and back{% else %}Laps of the circuit{% endif %}</h2><span class="panel-note">{% if an.shape.kind == "out_and_back" %}split at the turning point{% else %}{{ an.shape.laps }} laps of about {{ an.shape.lap_m|num }} m{% endif %}, from the GPS track</span></div>
     <div class="table-scroll table-scroll-full">
-    <table class="table">
+    <table class="table table-stack">
       <thead><tr><th scope="col">Part</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">Pace</th><th scope="col" class="num">HR</th><th scope="col" class="num">Climb</th><th scope="col" class="num">Headwind</th></tr></thead>
       <tbody>
-      {% for r in an.shape.rows %}<tr><th scope="row">{{ r.name }}</th><td class="num">{{ r.dist|km }} km</td><td class="num">{{ r.secs|dur }}</td><td class="num">{{ r.pace|pace }}</td><td class="num">{{ r.hr|num }}{% if r.hr_clean %}<span class="sub">{{ r.hr_clean|num }} unmarked</span>{% endif %}</td><td class="num">{{ r.up|num }} m</td><td class="num">{% if r.wind is not None %}{{ r.wind|signed:0 }} km/h{% else %}-{% endif %}</td></tr>{% endfor %}
+      {% for r in an.shape.rows %}<tr><th scope="row">{{ r.name }}</th><td class="num" data-label="Distance">{{ r.dist|km }} km</td><td class="num" data-label="Time">{{ r.secs|dur }}</td><td class="num" data-label="Pace">{{ r.pace|pace }}</td><td class="num" data-label="HR">{{ r.hr|num }}{% if r.hr_clean %}<span class="sub">{{ r.hr_clean|num }} unmarked</span>{% endif %}</td><td class="num" data-label="Climb">{{ r.up|num }} m</td><td class="num" data-label="Headwind">{% if r.wind is not None %}{{ r.wind|signed:0 }} km/h{% else %}-{% endif %}</td></tr>{% endfor %}
       </tbody>
     </table>
     </div>

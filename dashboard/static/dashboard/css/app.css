@@ -991,3 +991,30 @@ td .res-badge { margin-left: 0; vertical-align: 0; }
 .res-none { --res: var(--line-strong); font-weight: 500; color: var(--ink-2); }
 .goal-mark { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
 .goal-mark b { margin-right: 4px; color: var(--res); }
+
+/* wide tables on a phone: each row becomes a small card of labelled values, so nothing scrolls sideways */
+@media (max-width: 640px) {
+  .table-scroll:has(> .table-stack) { max-height: none; overflow: visible; }
+  .table-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table-stack, .table-stack tbody { display: block; }
+  .table-stack tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; padding: 12px 2px; border-bottom: 1px solid var(--grid); }
+  .table-stack tr:last-child { border-bottom: 0; }
+  .table-stack th, .table-stack td { display: block; border: 0; padding: 0; white-space: normal; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+  .table-stack .num { text-align: left; }
+  .table-stack tbody th, .table-stack .stack-title, .table-stack .stack-wide { grid-column: 1 / -1; }
+  .table-stack tr:has(> .stack-tag) > th, .table-stack tr:has(> .stack-status) > th { grid-column: 1 / 3; }
+  .table-stack .stack-tag, .table-stack .stack-status { grid-row: 1; grid-column: 3; justify-self: end; }
+  .table-stack .stack-title { font-weight: 650; font-size: 15px; margin-top: -6px; }
+  .table-stack tbody th { font-size: 13px; }
+  .table-stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); margin-bottom: 1px; }
+  .table-stack .sub, .table-stack .goal-mark { white-space: normal; }
+  .table-stack tr.is-best, .table-stack tr.is-today { background: var(--surface-2); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
+  .table-stack tr.is-best > *, .table-stack tr.is-today > * { background: transparent; }
+  /* the narrower tables only need tighter cells and headings that wrap */
+  .table thead th { white-space: normal; }
+  .table th, .table td { padding: 7px 5px; }
+  .table { font-size: 13.5px; }
+}
+pre.code { overflow-wrap: anywhere; }
+.stack-only { display: none; }
+@media (max-width: 640px) { .table-stack .stack-only { display: inline; } }

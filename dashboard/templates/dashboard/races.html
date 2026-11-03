@@ -32,17 +32,17 @@
 <section class="panel">
   <div class="panel-head"><h2>Past races</h2><span class="panel-note">predictions from the 90 days before each race</span></div>
   <div class="table-scroll">
-  <table class="table">
+  <table class="table table-stack">
     <thead><tr><th scope="col">Date</th><th scope="col">Race</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Your time</th><th scope="col">Against the predictions</th><th scope="col" class="num">VDOT said</th><th scope="col" class="num">Riegel said</th><th scope="col" class="num">Goal</th></tr></thead>
     <tbody>{% for r in past %}{% with v=r.view %}<tr>
       <th scope="row">{{ r.date|date:"j M Y" }}</th>
-      <td><a href="{% url 'race' r.pk %}">{{ r.name }}</a>{% if r.location %}<span class="sub">{{ r.location }}</span>{% endif %}</td>
-      <td class="num">{{ r.distance_km|kmv:2 }} km</td>
-      <td class="num">{% if v.result %}<a href="{% url 'activity' v.result.id %}">{{ v.result.secs|dur }}</a>{% else %}<span class="sub">no run found that day</span>{% endif %}</td>
-      <td>{% if v.result.verdict %}<span class="res-badge res-{{ v.result.verdict }}" title="{{ v.result.verdict_text }}"><b aria-hidden="true">{{ v.result.verdict_icon }}</b>{{ v.result.verdict_short }}</span>{% elif not v.pred %}<span class="res-badge res-none" title="No race or best effort over 3 km in the 90 days before, so nothing to predict from">No data before</span>{% else %}-{% endif %}</td>
-      <td class="num">{% if v.pred %}{{ v.pred.vdot_time|dur }}{% else %}<span class="sub">no data</span>{% endif %}</td>
-      <td class="num">{% if v.pred %}{{ v.pred.riegel_time|dur }}{% else %}<span class="sub">no data</span>{% endif %}</td>
-      <td class="num">{% if r.goal_s %}{{ r.goal_s|dur }}{% if v.result %}<span class="goal-mark {% if v.result.goal_hit %}res-better{% else %}res-worse{% endif %}"><b aria-hidden="true">{% if v.result.goal_hit %}&#10004;{% else %}&#10006;{% endif %}</b>{{ v.result.goal_diff|dur }} {% if v.result.goal_hit %}under{% else %}over{% endif %}</span>{% endif %}{% else %}-{% endif %}</td>
+      <td class="stack-title"><a href="{% url 'race' r.pk %}">{{ r.name }}</a>{% if r.location %}<span class="sub">{{ r.location }}</span>{% endif %}</td>
+      <td class="num" data-label="Distance">{{ r.distance_km|kmv:2 }} km</td>
+      <td class="num" data-label="Your time">{% if v.result %}<a href="{% url 'activity' v.result.id %}">{{ v.result.secs|dur }}</a>{% else %}<span class="sub">no run found that day</span>{% endif %}</td>
+      <td class="stack-wide">{% if v.result.verdict %}<span class="res-badge res-{{ v.result.verdict }}" title="{{ v.result.verdict_text }}"><b aria-hidden="true">{{ v.result.verdict_icon }}</b>{{ v.result.verdict_short }}</span>{% elif not v.pred %}<span class="res-badge res-none" title="No race or best effort over 3 km in the 90 days before, so nothing to predict from">No data before</span>{% else %}-{% endif %}</td>
+      <td class="num" data-label="VDOT said">{% if v.pred %}{{ v.pred.vdot_time|dur }}{% else %}<span class="sub">no data</span>{% endif %}</td>
+      <td class="num" data-label="Riegel said">{% if v.pred %}{{ v.pred.riegel_time|dur }}{% else %}<span class="sub">no data</span>{% endif %}</td>
+      <td class="num" data-label="Goal">{% if r.goal_s %}{{ r.goal_s|dur }}{% if v.result %}<span class="goal-mark {% if v.result.goal_hit %}res-better{% else %}res-worse{% endif %}"><b aria-hidden="true">{% if v.result.goal_hit %}&#10004;{% else %}&#10006;{% endif %}</b>{{ v.result.goal_diff|dur }} {% if v.result.goal_hit %}under{% else %}over{% endif %}</span>{% endif %}{% else %}-{% endif %}</td>
     </tr>{% endwith %}{% endfor %}</tbody>
   </table>
   </div>

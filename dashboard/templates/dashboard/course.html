@@ -21,20 +21,20 @@
   {% endif %}
   <section class="panel span-2">
     <div class="table-scroll table-scroll-full">
-    <table class="table">
+    <table class="table table-stack">
       <thead><tr><th scope="col">Date</th><th scope="col">Kind</th><th scope="col" class="num">Time</th><th scope="col" class="num">Behind best</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th><th scope="col" class="num">m per beat</th><th scope="col" class="num">Temp</th><th scope="col" class="num">Wind</th></tr></thead>
       <tbody>
       {% for r in data.rows reversed %}
         <tr{% if r.best %} class="is-best"{% endif %}>
           <th scope="row"><a href="{% url 'activity' r.id %}">{{ r.date|date:"D j M Y" }}</a></th>
-          <td>{% if r.kind %}<span class="chip chip-kind grp-{{ r.kind_key|kindgroup }}">{{ r.kind }}</span>{% endif %}</td>
-          <td class="num">{{ r.secs|dur }}{% if r.best %} <span class="chip chip-best">Best</span>{% endif %}</td>
-          <td class="num">{% if r.behind %}+{{ r.behind|dur }}{% elif r.best %}-{% endif %}</td>
-          <td class="num">{{ r.pace|pace }}</td>
-          <td class="num">{{ r.hr|num }}</td>
-          <td class="num">{{ r.ef|num:2 }}</td>
-          <td class="num">{% if r.temp is not None %}{{ r.temp|num }}°C{% else %}-{% endif %}</td>
-          <td class="num">{% if r.wind is not None %}{{ r.wind|num }} km/h{% else %}-{% endif %}</td>
+          <td class="stack-tag">{% if r.kind %}<span class="chip chip-kind grp-{{ r.kind_key|kindgroup }}">{{ r.kind }}</span>{% endif %}</td>
+          <td class="num" data-label="Time">{{ r.secs|dur }}{% if r.best %} <span class="chip chip-best">Best</span>{% endif %}</td>
+          <td class="num" data-label="Behind best">{% if r.behind %}+{{ r.behind|dur }}{% elif r.best %}-{% endif %}</td>
+          <td class="num" data-label="Pace">{{ r.pace|pace }}</td>
+          <td class="num" data-label="Avg HR">{{ r.hr|num }}</td>
+          <td class="num" data-label="m per beat">{{ r.ef|num:2 }}</td>
+          <td class="num" data-label="Temp">{% if r.temp is not None %}{{ r.temp|num }}°C{% else %}-{% endif %}</td>
+          <td class="num" data-label="Wind">{% if r.wind is not None %}{{ r.wind|num }} km/h{% else %}-{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

@@ -49,7 +49,7 @@
 <section class="panel kind-table-panel">
   <div class="panel-head"><h2>Every {% if kind == "race" %}race and time trial{% elif kind == "long" %}long run{% elif kind == "threshold" %}threshold session{% elif kind == "intervals" %}interval session{% elif kind == "progression" %}progression run{% elif kind == "warmup" %}warm-up and cool-down{% elif kind == "strides" %}set of strides{% else %}{{ label|lower }} run{% endif %}</h2><span class="panel-note">newest first</span></div>
   <div class="table-scroll">
-  <table class="table kind-table">
+  <table class="table kind-table table-stack">
     <thead><tr>
       <th scope="col">Date</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col" class="num">Pace</th><th scope="col" class="num">Avg HR</th>
       {% if kind == "race" %}<th scope="col" class="num">VDOT</th><th scope="col" class="num">Conditions</th>
@@ -62,12 +62,12 @@
     {% for r in data.kind_rows %}
       <tr>
         <th scope="row"><a href="{% url 'activity' r.id %}">{{ r.date|date:"D j M Y" }}</a><span class="sub">{{ r.title }}</span></th>
-        <td class="num">{{ r.km|kmv:2 }} km</td><td class="num">{{ r.secs|dur }}</td><td class="num">{{ r.pace|pace }}</td><td class="num">{{ r.hr|num }}</td>
-        {% if kind == "race" %}<td class="num">{{ r.vdot|num:1 }}</td><td class="num">{% if r.temp is not None %}{{ r.temp|num }}°C, {{ r.wind|num }} km/h{% else %}-{% endif %}</td>
-        {% elif kind == "threshold" or kind == "intervals" or kind == "progression" %}<td class="num">{% if r.reps %}{{ r.reps }} × {{ r.rep_min|num:1 }} min{% else %}-{% endif %}</td><td class="num">{% if r.work_min %}{{ r.work_min|num }} min{% else %}-{% endif %}</td><td class="num">{{ r.rep_pace|pace }}</td><td class="num">{{ r.rep_hr|num }}</td>
-        {% elif kind == "long" %}<td class="num">{% if r.finish_km %}{{ r.finish_km|kmv:1 }} km at {{ r.finish_pace|pace }}{% else %}-{% endif %}</td><td class="num">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
-        {% elif kind == "easy" or kind == "recovery" or kind == "steady" %}<td class="num">{{ r.z2_pace|pace }}</td><td class="num">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
-        {% else %}<td>{% if r.parent_id %}<a href="{% url 'activity' r.parent_id %}">{{ r.parent }}</a>{% else %}on its own{% endif %}</td>{% endif %}
+        <td class="num" data-label="Distance">{{ r.km|kmv:2 }} km</td><td class="num" data-label="Time">{{ r.secs|dur }}</td><td class="num" data-label="Pace">{{ r.pace|pace }}</td><td class="num" data-label="Avg HR">{{ r.hr|num }}</td>
+        {% if kind == "race" %}<td class="num" data-label="VDOT">{{ r.vdot|num:1 }}</td><td class="num" data-label="Conditions">{% if r.temp is not None %}{{ r.temp|num }}°C, {{ r.wind|num }} km/h{% else %}-{% endif %}</td>
+        {% elif kind == "threshold" or kind == "intervals" or kind == "progression" %}<td class="num" data-label="Fast blocks">{% if r.reps %}{{ r.reps }} × {{ r.rep_min|num:1 }} min{% else %}-{% endif %}</td><td class="num" data-label="Fast time">{% if r.work_min %}{{ r.work_min|num }} min{% else %}-{% endif %}</td><td class="num" data-label="Block pace">{{ r.rep_pace|pace }}</td><td class="num" data-label="Block HR">{{ r.rep_hr|num }}</td>
+        {% elif kind == "long" %}<td class="num" data-label="Fast running">{% if r.finish_km %}{{ r.finish_km|kmv:1 }} km at {{ r.finish_pace|pace }}{% else %}-{% endif %}</td><td class="num" data-label="Decoupling">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
+        {% elif kind == "easy" or kind == "recovery" or kind == "steady" %}<td class="num" data-label="Pace in zone 2">{{ r.z2_pace|pace }}</td><td class="num" data-label="Decoupling">{% if r.decoupling is not None %}{{ r.decoupling|num:1 }}%{% else %}-{% endif %}</td>
+        {% else %}<td class="stack-wide" data-label="With">{% if r.parent_id %}<a href="{% url 'activity' r.parent_id %}">{{ r.parent }}</a>{% else %}on its own{% endif %}</td>{% endif %}
       </tr>
     {% endfor %}
     </tbody>

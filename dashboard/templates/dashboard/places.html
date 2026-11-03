@@ -30,18 +30,18 @@
     <span class="panel-note">{{ c.count }} activit{{ c.count|pluralize:"y,ies" }}{% if c.km >= 1 %}, {{ c.km|kmv:0 }} km{% endif %}, {{ c.hours|hours:0 }} h</span>
   </div>
   <div class="table-scroll">
-  <table class="table places-table">
+  <table class="table places-table table-stack">
     <thead><tr><th scope="col">Place</th><th scope="col" class="num">Activities</th><th scope="col">Sports</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Time</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
     <tbody>
     {% for p in c.places %}
       <tr>
         <th scope="row"><a href="{% url 'place' p.slug %}">{{ p.name }}</a></th>
-        <td class="num">{{ p.count }}</td>
-        <td><span class="sport-dots">{% for s in p.sports %}<span class="sport-dot sport-{{ s.cat }}" title="{{ s.cat|catlabel }}"><i aria-hidden="true"></i>{{ s.n }}<span class="visually-hidden"> {{ s.cat|catlabel }}</span></span>{% endfor %}</span></td>
-        <td class="num">{% if p.km >= 1 %}{{ p.km|kmv:0 }} km{% else %}-{% endif %}</td>
-        <td class="num">{{ p.hours|hours:1 }} h</td>
-        <td>{{ p.first|nicedate }}</td>
-        <td>{{ p.last|nicedate }}</td>
+        <td class="num" data-label="Activities">{{ p.count }}</td>
+        <td data-label="Sports"><span class="sport-dots">{% for s in p.sports %}<span class="sport-dot sport-{{ s.cat }}" title="{{ s.cat|catlabel }}"><i aria-hidden="true"></i>{{ s.n }}<span class="visually-hidden"> {{ s.cat|catlabel }}</span></span>{% endfor %}</span></td>
+        <td class="num" data-label="Distance">{% if p.km >= 1 %}{{ p.km|kmv:0 }} km{% else %}-{% endif %}</td>
+        <td class="num" data-label="Time">{{ p.hours|hours:1 }} h</td>
+        <td data-label="First">{{ p.first|nicedate }}</td>
+        <td data-label="Last">{{ p.last|nicedate }}</td>
       </tr>
     {% endfor %}
     </tbody>
