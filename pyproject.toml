@@ -1,6 +1,6 @@
 [project]
 name = "splits"
-version = "0.3.0"
+version = "1.0.0"
 description = "A personal training dashboard built on Garmin's official Personal API."
 readme = "README.md"
 license = "MIT"

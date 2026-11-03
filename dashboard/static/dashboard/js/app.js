@@ -1745,6 +1745,9 @@
     input.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
     pop.addEventListener("mousedown", (e) => e.preventDefault());  // keep focus in the input
     pop.addEventListener("click", (e) => {
+      // redrawing the month replaces the button that was clicked: keep the click from reaching the
+      // "click outside closes the picker" listener, which would no longer find it inside the picker
+      e.stopPropagation();
       const b = e.target.closest("button");
       if (!b) return;
       if (b.dataset.dp) { view.setMonth(view.getMonth() + Number(b.dataset.dp)); draw(); return; }

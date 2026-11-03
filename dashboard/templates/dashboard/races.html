@@ -3,7 +3,7 @@
 {% block content %}
 <header class="page-head">
   <h1 class="display">Races</h1>
-  <p class="page-sub">Races you have entered. For each one the app predicts a time from your recent races and best efforts, two ways (Jack Daniels' VDOT and Pete Riegel's formula), with the pace, the splits and the paces to train at.</p>
+  <p class="page-sub">Races you have entered or already run. For each one the app predicts a time from your races and best efforts of the 90 days before it, two ways (Jack Daniels' VDOT and Pete Riegel's formula), with the pace, the splits and the paces to train at.</p>
 </header>
 {% if upcoming %}
 <ul class="race-list">
@@ -25,16 +25,26 @@
 <section class="empty"><p>No race coming up. Add the next one below.</p></section>
 {% endif %}
 <section class="panel">
-  <div class="panel-head"><h2>Add a race</h2></div>
+  <div class="panel-head"><h2>Add a race</h2><span class="panel-note">coming up, or one you have already run: the prediction then uses only the 90 days before it</span></div>
   {% include "dashboard/partials/race_form.html" %}
 </section>
 {% if past %}
 <section class="panel">
-  <div class="panel-head"><h2>Past races</h2></div>
+  <div class="panel-head"><h2>Past races</h2><span class="panel-note">predictions from the 90 days before each race</span></div>
+  <div class="table-scroll">
   <table class="table">
-    <thead><tr><th scope="col">Date</th><th scope="col">Race</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Goal</th></tr></thead>
-    <tbody>{% for r in past %}<tr><th scope="row">{{ r.date|date:"j M Y" }}</th><td><a href="{% url 'race' r.pk %}">{{ r.name }}</a></td><td class="num">{{ r.distance_km|kmv:2 }} km</td><td class="num">{% if r.goal_s %}{{ r.goal_s|dur }}{% else %}-{% endif %}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th scope="col">Date</th><th scope="col">Race</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Your time</th><th scope="col" class="num">VDOT said</th><th scope="col" class="num">Riegel said</th><th scope="col" class="num">Goal</th></tr></thead>
+    <tbody>{% for r in past %}{% with v=r.view %}<tr>
+      <th scope="row">{{ r.date|date:"j M Y" }}</th>
+      <td><a href="{% url 'race' r.pk %}">{{ r.name }}</a>{% if r.location %}<span class="sub">{{ r.location }}</span>{% endif %}</td>
+      <td class="num">{{ r.distance_km|kmv:2 }} km</td>
+      <td class="num">{% if v.result %}<a href="{% url 'activity' v.result.id %}">{{ v.result.secs|dur }}</a>{% else %}<span class="sub">no run found that day</span>{% endif %}</td>
+      <td class="num">{% if v.pred %}{{ v.pred.vdot_time|dur }}{% else %}-{% endif %}</td>
+      <td class="num">{% if v.pred %}{{ v.pred.riegel_time|dur }}{% else %}-{% endif %}</td>
+      <td class="num">{% if r.goal_s %}{{ r.goal_s|dur }}{% else %}-{% endif %}</td>
+    </tr>{% endwith %}{% endfor %}</tbody>
   </table>
+  </div>
 </section>
 {% endif %}
 {% endblock %}

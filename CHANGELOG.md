@@ -152,6 +152,6 @@ The first public version.
 - Demo data (`run.sh demo`) and a mock Garmin API for testing without a key.
 - Setup and run scripts for macOS, MIT license.
 
-[0.3.0]: https://github.com/idomingo/splits/compare/v0.2.0...v0.3.0
+[1.0.0]: https://github.com/idomingo/splits/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/idomingo/splits/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/idomingo/splits/releases/tag/v0.1.0

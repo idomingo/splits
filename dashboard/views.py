@@ -275,7 +275,10 @@ def races(request):
     for r in upcoming:
         r.days = (r.date - today).days
         r.pred = prediction(r.distance_m)
+    from .racing import race_view
     past = list(Race.objects.filter(date__lt=today).order_by("-date"))
+    for r in past:
+        r.view = race_view(r, today)
     return render(request, "dashboard/races.html", {"page": "races", "upcoming": upcoming, "past": past,
                                                     "distances": STANDARD_DISTANCES, "error": error,
                                                     "f": _race_fields(post=request.POST if error else None)})
