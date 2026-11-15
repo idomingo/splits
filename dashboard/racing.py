@@ -147,6 +147,22 @@ def matching_activity(race):
     return acts.filter(kind_q("race")).first() or acts.order_by("-distance_m").first()
 
 
+def is_done(race, today=None):
+    """A race is over once its day has passed, or on the day itself as soon as its run has synced."""
+    today = today or date.today()
+    return race.date < today or (race.date == today and matching_activity(race) is not None)
+
+
+def split_races(today=None):
+    """(upcoming, past) races: upcoming soonest first, past latest first."""
+    from .models import Race
+    today = today or date.today()
+    upcoming, past = [], []
+    for r in Race.objects.order_by("date"):
+        (past if is_done(r, today) else upcoming).append(r)
+    return upcoming, past[::-1]
+
+
 def readiness(race, today=None):
     """Plain facts about the build-up: longest run lately and weekly running distance."""
     from .models import Activity
@@ -163,7 +179,7 @@ def readiness(race, today=None):
 def race_view(race, today=None):
     """Everything the race page shows."""
     today = today or date.today()
-    past = race.date < today
+    past = is_done(race, today)
     src = fitness_source(today=min(today, race.date - timedelta(days=1)))
     pred = prediction(race.distance_m, src) if src else None
     goal = race.goal_s

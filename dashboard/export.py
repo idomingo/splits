@@ -1126,6 +1126,92 @@ def activity_markdown(act):
     return "\n".join(L)
 
 
+
+def _demote(md):
+    """Every Markdown heading one level down, leaving code blocks alone."""
+    out, fence = [], False
+    for line in md.split("\n"):
+        if line.startswith("```"):
+            fence = not fence
+        elif not fence and line.startswith("#"):
+            line = "#" + line
+        out.append(line)
+    return "\n".join(out)
+
+
+def _without_front_matter(md):
+    if md.startswith("---\n"):
+        end = md.find("\n---\n", 4)
+        if end != -1:
+            return md[end + 5:].lstrip("\n")
+    return md
+
+
+# sections that would only repeat the main run's file word for word, or nearly
+_PART_SKIP = ("## How to read this file", "## Compared with the runner's 90 days before", "## Training plan",
+              "## Races ahead", "## Training context", "## Every summary field from Garmin")
+
+
+def _drop_sections(md, starts):
+    """Remove the level-2 sections whose heading starts with any of `starts`, leaving code blocks alone."""
+    out, fence, skip = [], False, False
+    for line in md.split("\n"):
+        if not fence and line.startswith("## "):
+            skip = line.startswith(starts)
+        if line.startswith("```"):
+            fence = not fence
+        if not skip:
+            out.append(line)
+    return "\n".join(out)
+
+
+def session_markdown(act):
+    """The run as a Markdown file for AI tools, with the warm-up, cool-down and strides recorded as separate
+    activities of the same session. The main run comes first and in full; the session table sits near the top;
+    each other part follows at the end with its own figures and per-second recording. A run that has no other
+    parts gives exactly the same file as activity_markdown."""
+    from .models import Activity
+    from .runtypes import session_role
+    main = act.session_of if act.session_of_id else act
+    extras = list(Activity.objects.filter(session_of=main).select_related("stream", "place").order_by("start_local"))
+    if not extras:
+        return activity_markdown(act)
+    parts = sorted([main] + extras, key=lambda x: x.start_local)
+    role = {p.pk: "Run" if p.pk == main.pk else session_role(p, main) for p in parts}
+    total_km = sum(p.distance_km or 0 for p in parts)
+
+    lines = activity_markdown(main).split("\n")
+    # front matter: the session in one line, before the closing ---
+    close = lines.index("---", 1)
+    lines[close:close] = [
+        "session_parts: \"" + ", ".join(
+            role[p.pk] + ("" if p.pk == main.pk else f" {_n(p.distance_km, 2)} km") for p in parts) + "\"",
+        f"session_distance_km: {_n(total_km, 2)}",
+    ]
+    rows, prev_end = [], None
+    for p in parts:
+        gap = (p.start_local - prev_end).total_seconds() if prev_end else None
+        rows.append([role[p.pk], f"{p.start_local:%H:%M:%S}", _n(p.distance_km, 2), _dur(p.time_s),
+                     _pace(p.pace_s_per_km) if p.pace_s_per_km else "", _n(p.avg_hr) if p.avg_hr else "",
+                     _n(p.max_hr) if p.max_hr else "", _dur(gap) if gap is not None and gap > 0 else ""])
+        prev_end = p.start_local + timedelta(seconds=p.elapsed_s or p.time_s or 0)
+    section = ["## The whole session", "",
+               f"The runner recorded this session as {len(parts)} separate activities on the watch, "
+               f"{_n(total_km, 2)} km in all. The sections that follow describe the main run only; "
+               "each other part comes at the end of the file with its own figures and per-second recording "
+               "(the training plan, training context and history are given once, for the main run).", ""]
+    section.append(_table(["Part", "Start", "Distance km", "Time", "Pace /km", "Avg HR", "Max HR", "Pause before"], rows))
+    section.append("")
+    at = lines.index("## How to read this file")
+    lines[at:at] = section
+
+    out = "\n".join(lines).rstrip("\n") + "\n"
+    for p in extras:
+        body = _demote(_drop_sections(_without_front_matter(activity_markdown(p)), _PART_SKIP))
+        out += f"\n# Session part: {role[p.pk]}, {p.start_local:%H:%M}\n\n{body.rstrip()}\n"
+    return out
+
+
 # ---------- the same analysis for the activity page (worked out once, kept with the stream) ----------
 ANALYSIS_VERSION = 1
 

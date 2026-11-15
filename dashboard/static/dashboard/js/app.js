@@ -231,6 +231,8 @@
       if (next === "auto") delete document.documentElement.dataset.theme;
       else document.documentElement.dataset.theme = next;
       try { next === "auto" ? localStorage.removeItem("splits-theme") : localStorage.setItem("splits-theme", next); } catch (e) {}
+      // the phone's browser bar takes the colour of the page
+      $$('meta[name="theme-color"]').forEach((m) => { m.content = next === "auto" ? m.dataset.auto : next === "dark" ? "#0c1318" : "#edf1f4"; });
       show();
       rerenderAll();
     });
@@ -1773,6 +1775,7 @@
     });
     $$("[data-datepicker]").forEach(datePicker);
     initMenu();
+    document.addEventListener("touchstart", () => {}, { passive: true });  // lets a phone show the pressed state of what you tap
     // courses: hide the ones run only once (remembered in this browser)
     const once = $("[data-hide-once]");
     if (once) {

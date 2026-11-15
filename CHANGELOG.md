@@ -3,6 +3,55 @@
 All notable changes to Splits. Versions follow [semantic versioning](https://semver.org);
 each version is a git tag.
 
+## [Unreleased]
+
+### Changed
+
+- **Download for AI** now covers the whole session. When a warm-up, cool-down or
+  strides were recorded as separate activities, the file for the main run lists
+  every part in a session table near the top, then adds each part at the end with
+  its own totals, zones, weather, splits and every recorded point. Downloading from
+  a warm-up, cool-down or strides card gives the same file, named after the main
+  run. A run recorded as a single activity gives exactly the same file as before.
+- The **Training plan** page shows one week at a time, Monday to Sunday, and opens
+  on this week. Arrows beside the heading step a week back or forward. Under the
+  table, a pager has one numbered button per week with the date it starts, and
+  arrows for the first, previous, next and last week. The open week is filled, and
+  this week has a ring and the word "now". A long plan shows the first and last
+  weeks, this week and the weeks around the open one.
+- Each plan status carries a mark as well as its word and colour: ✔ done,
+  ✖ missed, ↓ shorter, ↑ longer, + a run on a rest day. Planned
+  sessions in the **training log** carry the same mark in a corner, so a status
+  reads the same without colour.
+- On the plan page, the last 4 weeks show a bar for sessions done and distance run
+  against the plan.
+- A link written in a race's notes can be opened.
+- On a phone:
+  - Rows that turn into cards are tighter, and a card leaves out values that are
+    empty (a rest day has no distance or pace).
+  - A past race shows its result against the predictions at the top right of its
+    card.
+  - A long activity name takes two lines in the feed instead of being cut short.
+  - Buttons, menu rows, the theme button and the download button are at least 40px
+    tall, and a tap shows on the thing you tapped.
+  - Typing in a field no longer zooms the page.
+  - The browser bar takes the colour of the page, in the light and the dark theme.
+  - An odd tile at the end of a row of figures takes the whole row.
+- Hover and press states change softly, race and course cards in a row are the same
+  height, and the file button of the plan import matches the other buttons.
+
+### Fixed
+
+- A race stayed under "upcoming" and said **Today** for the whole race day, even after
+  its run had synced. A race now counts as run as soon as its activity arrives: it
+  moves to Past races with your result, and the countdown moves on to the next one.
+- The Training plan page showed six weeks in one table, which was too long to read.
+- On a phone, the page of a past race scrolled sideways when its result had two
+  labels. The labels now wrap under the title.
+- On a phone, the day names under **This week** on the overview slid out of their
+  card when one activity was long enough to fill the column.
+- On a narrow phone, the top bar wrapped onto two lines.
+
 ## [1.0.2] - 2026-11-03
 
 ### Fixed

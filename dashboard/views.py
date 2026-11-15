@@ -134,10 +134,12 @@ def set_run_type(request, activity_id):
 def export_activity(request, activity_id):
     """The run as a Markdown file for AI tools (descriptive Markdown plus CSV for the per-second data)."""
     from django.http import HttpResponse
-    from .export import activity_markdown, content_disposition, filename
+    from .export import content_disposition, filename, session_markdown
     act = get_object_or_404(Activity.objects.select_related("stream", "place"), pk=activity_id, category="run")
-    resp = HttpResponse(activity_markdown(act), content_type="text/markdown; charset=utf-8")
-    resp["Content-Disposition"] = content_disposition(filename(act))
+    # a warm-up, cool-down or strides fragment downloads its whole session, named after the main run
+    main = act.session_of if act.session_of_id else act
+    resp = HttpResponse(session_markdown(act), content_type="text/markdown; charset=utf-8")
+    resp["Content-Disposition"] = content_disposition(filename(main))
     return resp
 
 
@@ -271,12 +273,12 @@ def races(request):
             race.save()
             return redirect("race", race_id=race.pk)
     today = date.today()
-    upcoming = list(Race.objects.filter(date__gte=today))
+    from .racing import split_races
+    upcoming, past = split_races(today)
     for r in upcoming:
         r.days = (r.date - today).days
         r.pred = prediction(r.distance_m)
     from .racing import race_view
-    past = list(Race.objects.filter(date__lt=today).order_by("-date"))
     for r in past:
         r.view = race_view(r, today)
     return render(request, "dashboard/races.html", {"page": "races", "upcoming": upcoming, "past": past,
@@ -321,7 +323,11 @@ def plan(request):
             result = {"count": count, "errors": errors}
         else:
             result = {"count": 0, "errors": ["Choose a CSV file, or paste the plan into the box."]}
-    return render(request, "dashboard/plan.html", {"page": "plan", "data": P.overview(), "result": result,
+    try:
+        week = int(request.GET.get("week") or 0) or None
+    except ValueError:
+        week = None
+    return render(request, "dashboard/plan.html", {"page": "plan", "data": P.overview(week=week), "result": result,
                                                    "prompt": P.AI_PROMPT, "kinds": P.KINDS})
 
 

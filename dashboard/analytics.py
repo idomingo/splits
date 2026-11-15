@@ -182,9 +182,8 @@ def overview():
 
 
 def _next_race(today):
-    from .models import Race
-    from .racing import prediction
-    r = Race.objects.filter(date__gte=today).order_by("date").first()
+    from .racing import prediction, split_races
+    r = next(iter(split_races(today)[0]), None)
     if not r:
         return None
     return {"race": r, "days": (r.date - today).days, "pred": prediction(r.distance_m)}

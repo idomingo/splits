@@ -69,11 +69,11 @@
     </tbody>
   </table>
   </div>
-  <p class="panel-note">Running: distance of every run that week, and the change from the week before. Easy / hard: running time in zones 1 and 2 against zones 3 to 5. Many coaches aim for about 80% easy.</p>
+  <p class="panel-note">Running: distance of every run that week, and the change from the week before. Easy / hard: running time in zones 1 and 2 against zones 3 to 5. Many coaches aim for about 80% easy.{% if has_plan %} On a planned session, the mark in the corner says how it went: &#10004; done as planned, &#10006; missed, &darr; shorter, &uarr; longer, + a run on a rest day.{% endif %}</p>
 </section>
 <nav class="log-pager">
-  {% if data.newer %}<a class="btn" href="?before={{ data.newer }}">Newer weeks</a>{% endif %}
-  {% if data.older %}<a class="btn" href="?before={{ data.older }}">Earlier weeks</a>{% endif %}
+  {% if data.newer %}<a class="btn" href="?before={{ data.newer }}" rel="prev"><svg class="icon" aria-hidden="true"><use href="#i-prev"></use></svg>Newer weeks</a>{% endif %}
+  {% if data.older %}<a class="btn" href="?before={{ data.older }}" rel="next">Earlier weeks<svg class="icon" aria-hidden="true"><use href="#i-next"></use></svg></a>{% endif %}
 </nav>
 {% endif %}
 {% endblock %}

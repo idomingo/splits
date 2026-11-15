@@ -11,7 +11,7 @@
   </span>
 </nav>
 <header class="act-head sport-{{ a.category }}">
-  {% if a.category == "run" %}<a class="btn act-download" href="{% url 'export_activity' a.activity_id %}" download title="One file with everything about this run: details, splits, weather and every recorded second. Ready to give to an AI tool."><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>Download for AI</span></a>{% endif %}
+  {% if a.category == "run" %}<a class="btn act-download" href="{% url 'export_activity' a.activity_id %}" download title="One file with everything about this run: details, splits, weather and every recorded second, plus its warm-up, cool-down and strides when they were recorded separately. Ready to give to an AI tool."><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>Download for AI</span></a>{% endif %}
   <div class="act-title">
     <span class="act-icon">{% sport_icon a.category "icon icon-lg" %}</span>
     <div>

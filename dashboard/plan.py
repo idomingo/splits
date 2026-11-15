@@ -152,6 +152,8 @@ def status(session, done, today=None):
 
 STATUS_LABEL = {"done": "Done", "short": "Shorter", "long": "Longer", "missed": "Missed", "extra": "Ran on a rest day",
                 "rest": "Rested", "today": "Today", "planned": "Planned"}
+# a mark beside each word (tick, cross, down, up, plus), so a status reads the same without colour
+STATUS_MARK = {"done": "\u2714", "rest": "\u2714", "missed": "\u2716", "short": "\u2193", "long": "\u2191", "extra": "+"}
 
 
 def by_day(first, last):
@@ -163,16 +165,9 @@ def by_day(first, last):
     return out
 
 
-def overview(today=None):
-    """What the plan page shows: the next two weeks, and how the last four went."""
-    from .models import Activity, PlanSession
-    today = today or date.today()
-    if not PlanSession.objects.exists():
-        return {"empty": True}
-    first = PlanSession.objects.order_by("date").first().date
-    last = PlanSession.objects.order_by("-date").first().date
-    lo = max(first, today - timedelta(days=28))
-    hi = min(last, today + timedelta(days=14))
+def _rows(lo, hi, today):
+    """One row per planned session between two dates, each with what was done that day."""
+    from .models import Activity
     acts = {}
     for a in Activity.objects.filter(start_local__date__gte=lo, start_local__date__lte=hi, session_of=None):
         km = a.distance_km + sum(x.distance_km for x in a.session_extras.all())
@@ -186,12 +181,53 @@ def overview(today=None):
             st = status(s, acts.get(d, []), today)
             run_day = s.kind in RUN_KINDS or s.kind == "rest"
             shown = [a for a in acts.get(d, []) if (a["category"] == "run") == run_day]
-            days.append({"s": s, "label": label(s.kind), "status": st, "status_label": STATUS_LABEL[st],
+            days.append({"s": s, "label": label(s.kind), "status": st, "status_label": STATUS_LABEL[st], "status_mark": STATUS_MARK.get(st, ""),
                          "done": shown, "past": d < today, "today": d == today})
         d += timedelta(days=1)
-    past = [x for x in days if x["past"] and x["s"].kind != "rest"]
+    return days
+
+
+def _page_links(n, total, this_week):
+    """Page numbers to show: the first, the last, this week's and the ones around the open page; None is a gap."""
+    keep = {1, total, n - 1, n, n + 1} | ({this_week} if this_week else set())
+    if total <= 7:
+        keep = set(range(1, total + 1))
+    out, prev = [], 0
+    for i in sorted(k for k in keep if 1 <= k <= total):
+        if i - prev == 2:
+            out.append(prev + 1)
+        elif i - prev > 2:
+            out.append(None)
+        out.append(i)
+        prev = i
+    return out
+
+
+def overview(today=None, week=None):
+    """What the plan page shows: one week (Monday to Sunday) per page, opening on this week, and how the
+    last four weeks went. Week 1 is the week the plan starts in."""
+    from .models import PlanSession
+    today = today or date.today()
+    if not PlanSession.objects.exists():
+        return {"empty": True}
+    first = PlanSession.objects.order_by("date").first().date
+    last = PlanSession.objects.order_by("-date").first().date
+    monday = first - timedelta(days=first.weekday())
+    total = (last - monday).days // 7 + 1
+    now = (today - monday).days // 7 + 1          # the week today falls in
+    this_week = now if 1 <= now <= total else None
+    n = max(1, min(week or now, total))
+    lo = monday + timedelta(days=7 * (n - 1))
+    hi = lo + timedelta(days=6)
+    days = _rows(max(lo, first), min(hi, last), today)
+    page = {"n": n, "total": total, "lo": lo, "hi": hi, "current": n == this_week, "this_week": this_week,
+            "prev": n - 1 if n > 1 else None, "next": n + 1 if n < total else None,
+            "links": [None if i is None else {"n": i, "lo": monday + timedelta(days=7 * (i - 1)), "on": i == n,
+                                              "now": i == this_week} for i in _page_links(n, total, this_week)]}
+    recent = _rows(max(first, today - timedelta(days=28)), min(last, today - timedelta(days=1)), today)
+    past = [x for x in recent if x["s"].kind != "rest"]
     hit = sum(1 for x in past if x["status"] == "done")
     planned_km = sum(x["s"].distance_km or 0 for x in past)
     done_km = sum(sum(a["km"] for a in x["done"] if a["category"] == "run") for x in past)
-    return {"empty": False, "first": first, "last": last, "days": days, "count": PlanSession.objects.count(),
+    return {"empty": False, "first": first, "last": last, "days": days, "page": page, "count": PlanSession.objects.count(),
             "past_n": len(past), "past_done": hit, "planned_km": planned_km, "done_km": done_km}

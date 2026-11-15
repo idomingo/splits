@@ -17,12 +17,23 @@
 <div class="kpis">
   <div class="kpi"><p class="kpi-label">Plan</p><p class="kpi-value kpi-text">{{ data.first|date:"j M" }} to {{ data.last|date:"j M Y" }}</p><p class="kpi-meta">{{ data.count }} sessions</p></div>
   {% if data.past_n %}
-  <div class="kpi"><p class="kpi-label">Last 4 weeks</p><p class="kpi-value">{{ data.past_done }}<small> of {{ data.past_n }}</small></p><p class="kpi-meta">sessions done as planned</p></div>
-  <div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ data.done_km|kmv:0 }}<small> of {{ data.planned_km|kmv:0 }} km</small></p><p class="kpi-meta">run against planned</p></div>
+  <div class="kpi"><p class="kpi-label">Last 4 weeks</p><p class="kpi-value">{{ data.past_done }}<small> of {{ data.past_n }}</small></p><div class="meter" aria-hidden="true"><i style="width:{% widthratio data.past_done data.past_n 100 %}%"></i></div><p class="kpi-meta">sessions done as planned</p></div>
+  <div class="kpi"><p class="kpi-label">Distance</p><p class="kpi-value">{{ data.done_km|kmv:0 }}<small> of {{ data.planned_km|kmv:0 }} km</small></p><div class="meter" aria-hidden="true"><i style="width:{% widthratio data.done_km data.planned_km 100 %}%"></i></div><p class="kpi-meta">run against planned</p></div>
   {% endif %}
 </div>
-<section class="panel">
-  <div class="panel-head"><h2>Four weeks back, two weeks ahead</h2></div>
+{% with pg=data.page %}
+<section class="panel" id="week">
+  <div class="panel-head plan-head">
+    <h2>{% if pg.lo.month == pg.hi.month %}{{ pg.lo|date:"j" }}-{{ pg.hi|date:"j M" }}{% else %}{{ pg.lo|date:"j M" }} - {{ pg.hi|date:"j M" }}{% endif %}{% if pg.current %} <span class="chip chip-now">This week</span>{% endif %}</h2>
+    <div class="plan-step">
+      <span class="panel-note">Week {{ pg.n }} of {{ pg.total }}</span>
+      {% if pg.this_week and not pg.current %}<a class="link" href="{% url 'plan' %}#week">Go to this week</a>{% endif %}
+      {% if pg.total > 1 %}<span class="pager-step">
+        {% if pg.prev %}<a href="?week={{ pg.prev }}#week" rel="prev" title="Week before" aria-label="Week before"><svg class="icon" aria-hidden="true"><use href="#i-prev"></use></svg></a>{% else %}<span aria-hidden="true"><svg class="icon"><use href="#i-prev"></use></svg></span>{% endif %}
+        {% if pg.next %}<a href="?week={{ pg.next }}#week" rel="next" title="Week after" aria-label="Week after"><svg class="icon" aria-hidden="true"><use href="#i-next"></use></svg></a>{% else %}<span aria-hidden="true"><svg class="icon"><use href="#i-next"></use></svg></span>{% endif %}
+      </span>{% endif %}
+    </div>
+  </div>
   <div class="table-scroll table-scroll-full">
   <table class="table plan-table table-stack">
     <thead><tr><th scope="col">Day</th><th scope="col">Planned</th><th scope="col" class="num">Distance</th><th scope="col">Pace</th><th scope="col">Done</th><th scope="col">Status</th></tr></thead>
@@ -31,17 +42,32 @@
       <tr class="{% if x.today %}is-today{% endif %}{% if not x.past and not x.today %} is-future{% endif %}">
         <th scope="row">{{ x.s.date|date:"D j M" }}</th>
         <td class="stack-wide"><strong>{{ x.s.title|default:x.label }}</strong>{% if x.s.title and x.s.title != x.label %}<span class="sub">{{ x.label }}</span>{% endif %}{% if x.s.description %}<span class="sub">{{ x.s.description }}</span>{% endif %}</td>
-        <td class="num" data-label="Distance">{% if x.s.distance_km %}{{ x.s.distance_km|kmv:1 }} km{% elif x.s.duration_min %}{{ x.s.duration_min|num }} min{% else %}-{% endif %}</td>
-        <td data-label="Pace">{{ x.s.pace|default:"-" }}</td>
-        <td class="stack-wide" data-label="Done">{% for a in x.done %}<a href="{% url 'activity' a.id %}">{{ a.title }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</td>
-        <td class="stack-status"><span class="plan-status st-{{ x.status }}">{{ x.status_label }}</span></td>
+        {% if x.s.distance_km %}<td class="num" data-label="Distance">{{ x.s.distance_km|kmv:1 }} km</td>{% elif x.s.duration_min %}<td class="num" data-label="Time">{{ x.s.duration_min|num }} min</td>{% else %}<td class="num is-empty" data-label="Distance">-</td>{% endif %}
+        <td data-label="Pace"{% if not x.s.pace %} class="is-empty"{% endif %}>{{ x.s.pace|default:"-" }}</td>
+        <td class="stack-wide{% if not x.done %} is-empty{% endif %}" data-label="Done">{% for a in x.done %}<a href="{% url 'activity' a.id %}">{{ a.title }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}-{% endfor %}</td>
+        <td class="stack-status"><span class="plan-status st-{{ x.status }}">{% if x.status_mark %}<b aria-hidden="true">{{ x.status_mark }}</b>{% endif %}{{ x.status_label }}</span></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  {% if pg.total > 1 %}<nav class="pager" aria-label="Weeks of the plan">
+    <p class="pager-info"><strong>Week {{ pg.n }}</strong> of {{ pg.total }}</p>
+    <div class="pager-ctl">
+      <span class="pager-step pager-back">
+        {% if pg.prev %}<a href="?week=1#week" title="First week" aria-label="First week"><svg class="icon" aria-hidden="true"><use href="#i-first"></use></svg></a><a href="?week={{ pg.prev }}#week" rel="prev" title="Week before" aria-label="Week before"><svg class="icon" aria-hidden="true"><use href="#i-prev"></use></svg></a>{% else %}<span aria-hidden="true"><svg class="icon"><use href="#i-first"></use></svg></span><span aria-hidden="true"><svg class="icon"><use href="#i-prev"></use></svg></span>{% endif %}
+      </span>
+      <ol class="pager-pages">
+        {% for l in pg.links %}{% if l is None %}<li class="pager-gap" aria-hidden="true">&hellip;</li>{% elif l.on %}<li><span class="pager-page is-on{% if l.now %} is-now{% endif %}" aria-current="page" title="Week {{ l.n }}, from {{ l.lo|date:'j M' }}: open now"><b>{{ l.n }}</b><small>{% if l.now %}now{% else %}{{ l.lo|date:"j M" }}{% endif %}</small></span></li>{% else %}<li><a class="pager-page{% if l.now %} is-now{% endif %}" href="?week={{ l.n }}#week" title="Week {{ l.n }}, from {{ l.lo|date:'j M' }}{% if l.now %}: this week{% endif %}" aria-label="Week {{ l.n }}, from {{ l.lo|date:'j M' }}{% if l.now %}, this week{% endif %}"><b>{{ l.n }}</b><small>{% if l.now %}now{% else %}{{ l.lo|date:"j M" }}{% endif %}</small></a></li>{% endif %}{% endfor %}
+      </ol>
+      <span class="pager-step pager-fwd">
+        {% if pg.next %}<a href="?week={{ pg.next }}#week" rel="next" title="Week after" aria-label="Week after"><svg class="icon" aria-hidden="true"><use href="#i-next"></use></svg></a><a href="?week={{ pg.total }}#week" title="Last week" aria-label="Last week"><svg class="icon" aria-hidden="true"><use href="#i-last"></use></svg></a>{% else %}<span aria-hidden="true"><svg class="icon"><use href="#i-next"></use></svg></span><span aria-hidden="true"><svg class="icon"><use href="#i-last"></use></svg></span>{% endif %}
+      </span>
+    </div>
+  </nav>{% endif %}
   <p class="panel-note">Done means a run that day within 20% of the planned distance (warm-ups and cool-downs count with their run). The whole plan, day by day, is in the <a href="{% url 'log' %}">training log</a>.</p>
 </section>
+{% endwith %}
 {% endif %}
 
 <section class="panel">

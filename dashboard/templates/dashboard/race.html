@@ -6,7 +6,7 @@
   <h1 class="display display-md">{{ r.name }}</h1>
   <p class="page-sub">{{ r.date|date:"l j F Y" }}{% if r.location %}, {{ r.location }}{% endif %}, {{ r.distance_km|kmv:2 }} km.
     {% if d.past %}{% elif d.days == 0 %}<strong>Today.</strong>{% elif d.days == 1 %}<strong>Tomorrow.</strong>{% else %}<strong>In {{ d.days }} days</strong> ({{ d.days|div:7|num:1 }} weeks).{% endif %}</p>
-  {% if r.notes %}<p class="race-notes">{{ r.notes|linebreaksbr }}</p>{% endif %}
+  {% if r.notes %}<p class="race-notes">{{ r.notes|urlize|linebreaksbr }}</p>{% endif %}
 </header>
 
 {% if d.result %}{% with x=d.result %}

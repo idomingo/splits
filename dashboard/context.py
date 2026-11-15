@@ -61,8 +61,8 @@ def nav(request):
     except Exception:  # never break the menu over this
         n_courses = 0
 
-    from .models import Race
-    nxt = Race.objects.filter(date__gte=date.today()).order_by("date").first()
+    from .racing import split_races
+    nxt = next(iter(split_races()[0]), None)
 
     last = SyncRun.objects.exclude(status=SyncRun.RUNNING).first()
     return {
